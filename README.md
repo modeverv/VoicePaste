@@ -1,34 +1,36 @@
 # VoicePaste
 
-ローカルWhisperで音声をテキストに変換し、クリップボードに送る。  
-AquaVoice要らず。サブスク不要。データはあなたのマシンから出ない。
+Transcribe speech to text using local Whisper and send it straight to your clipboard.  
+No subscription. No cloud. Your data never leaves your machine.
+
+[日本語版 README](README.jp.md)
 
 ---
 
-## 特徴
+## Features
 
-- **完全ローカル** : 音声・テキストが外部サーバーに送信されない
-- **クロスプラットフォーム** : macOS / Linux / Windows 対応
-- **Push-to-Talk** : ホットキーを押している間だけ録音する
-- **高速** : macOS Apple Silicon では mlx-whisper、その他は faster-whisper を使用
-- **TUI** : ターミナルにリアルタイムで状態を表示する
-- **シンプル** : クリップボードに入れるだけ。ペーストのタイミングは自分で決める
-- **LLM整形** : 確定Whisper結果をローカルGemma 4 E2Bで自然な文章へ整形できる
+- **Fully local** — audio and text are never sent to an external server
+- **Cross-platform** — macOS / Linux / Windows
+- **Push-to-Talk** — records only while the hotkey is held
+- **Fast** — uses mlx-whisper on Apple Silicon, faster-whisper everywhere else
+- **TUI** — real-time status display in the terminal
+- **Simple** — copies to clipboard; you decide when to paste
+- **LLM polish** — optionally refines the final Whisper output with a local Gemma 4 E2B model
 
 ---
 
-## 動作イメージ
+## How it works
 
 ```
-ホットキーを押す → 録音中...
-ホットキーを離す → 文字起こし中...
-                 → ✓ クリップボードにコピーされました
-好きな場所でペースト（Cmd+V / Ctrl+V / C-y）
+Hold hotkey  → Recording...
+Release      → Transcribing...
+             → ✓ Copied to clipboard
+Paste anywhere (Cmd+V / Ctrl+V / C-y)
 ```
 
 ---
 
-## インストール
+## Installation
 
 ### macOS / Linux
 
@@ -46,12 +48,12 @@ cd voicepaste
 prepare.bat
 ```
 
-> **LLM モデルのダウンロードについて**  
-> `make install` / `prepare.bat` は依存ライブラリのインストール後、`config.yaml` の `formatter.backend` が `"llm"` の場合に LLM モデルを自動でダウンロードします（初回のみ・数分かかります）。`"rule"` の場合はスキップされます。
+> **LLM model download**  
+> `make install` / `prepare.bat` installs dependencies and then automatically downloads the LLM model if `formatter.backend` is set to `"llm"` in `config.yaml` (first run only — may take a few minutes). If set to `"rule"` the download is skipped.
 
-### Linux の注意事項
+### Linux note
 
-xclip が必要です。
+xclip is required:
 
 ```bash
 # Ubuntu / Debian
@@ -63,7 +65,7 @@ sudo pacman -S xclip
 
 ---
 
-## 起動
+## Running
 
 ### macOS / Linux
 
@@ -79,33 +81,33 @@ start.bat
 
 ---
 
-## 権限について
+## Permissions
 
-初回起動時にOSから以下の権限を求められます。
+On first launch the OS will request:
 
-| 権限 | 理由 |
-|------|------|
-| マイク | 音声録音のため |
-| アクセシビリティ | グローバルホットキーのため |
+| Permission | Reason |
+|------------|--------|
+| Microphone | Audio recording |
+| Accessibility | Global hotkey listener |
 
-これらの権限はローカルでのみ使用されます。
+These permissions are used locally only.
 
 ---
 
-## 設定
+## Configuration
 
-`config.yaml` を編集して設定を変更できます。
+Edit `config.yaml` to customise behaviour:
 
 ```yaml
-hotkey: "<cmd>+<shift>+space"   # グローバルホットキー
+hotkey: "<cmd>+<shift>+space"   # global hotkey
 model: "base"                    # tiny / base / small / medium / large
-language: "ja"                   # 文字起こし言語
+language: "ja"                   # transcription language
 device: "auto"                   # auto / cpu / cuda / mlx
-chunk_seconds: 3                 # 暫定表示のチャンク秒数
+chunk_seconds: 3                 # interim-display chunk length in seconds
 formatter:
   backend: "rule"                # rule / llm
-  remove_fillers: true           # あー・えっと等を除去する
-  add_punctuation: true          # 句読点を補完する
+  remove_fillers: true           # strip filler words
+  add_punctuation: true          # add punctuation
   fillers:
     - "あー"
     - "えっと"
@@ -116,10 +118,10 @@ formatter:
     - "ちょっと待って"
   llm:
     prompt: |
-      あなたは音声入力の確定テキストを整形する編集者です。
-      Whisperの文字起こし結果を、意味を変えずに読みやすい日本語へ整えてください。
-      フィラー、言い直し、余分な空白を削り、必要な句読点を補ってください。
-      固有名詞、数値、コード、URLは推測で変更しないでください。
+      You are an editor that polishes voice-input transcripts.
+      Clean up the Whisper output into natural, readable text without changing the meaning.
+      Remove fillers, false starts, and extra whitespace; add punctuation where needed.
+      Do not guess at proper nouns, numbers, code, or URLs.
     backend: "auto"              # auto / mlx / gguf
     mlx_model: "mlx-community/gemma-4-e2b-it-4bit"
     gguf_repo_id: "mradermacher/gemma-4-E2B-it-GGUF"
@@ -131,77 +133,74 @@ formatter:
     n_gpu_layers: -1
 ```
 
-### LLM整形
+### LLM formatting
 
-`formatter.backend: "llm"` にすると、録音終了後の確定Whisper結果だけをローカルLLMで整形します。
-録音中の暫定表示は速度優先のためLLM整形しません。
-LLM応答は `{"formatted_text": "..."}` のJSONオブジェクトに限定し、余分なキーや自由文はエラーとして扱います。
-システムプロンプトは `formatter.llm.prompt` に直接記述します。
+Set `formatter.backend: "llm"` to refine the final Whisper output with a local LLM.
+Interim (mid-recording) previews are not LLM-processed for speed.
+The system prompt is configured directly in `formatter.llm.prompt`.
 
-macOSではMLX版の `mlx-community/gemma-4-e2b-it-4bit` を使用します。Linux / Windowsでは
-`llama-cpp-python` からGGUF版の `mradermacher/gemma-4-E2B-it-GGUF` の `Q4_K_M` を使用します。
+On macOS the MLX model `mlx-community/gemma-4-e2b-it-4bit` is used.
+On Linux / Windows `llama-cpp-python` loads the GGUF model `mradermacher/gemma-4-E2B-it-GGUF` (`Q4_K_M`).
 
-`make install` / `prepare.bat` 実行時に自動でダウンロードされます。
-モデルはプロジェクト直下の `models/` に保存され、`models/` の中身は `.gitignore` で除外されます。
-完全オフラインで使う場合は事前にモデルを取得し、`model` にローカルパスまたはモデルIDを指定してください。
+Models are downloaded automatically by `make install` / `prepare.bat` and stored in `models/`
+at the project root. The contents of `models/` are excluded by `.gitignore`.
+For fully offline use, download the model in advance and set `model` to a local path or model ID.
 
-### モデルサイズの目安
+### Whisper model sizes
 
-| モデル | 精度 | 速度 | メモリ |
-|--------|------|------|--------|
-| tiny | 低 | 最速 | ~150MB |
-| base | 中 | 速い | ~300MB |
-| small | 高 | 普通 | ~500MB |
-| medium | 最高 | 遅い | ~1.5GB |
+| Model | Accuracy | Speed | Memory |
+|-------|----------|-------|--------|
+| tiny | low | fastest | ~150 MB |
+| base | medium | fast | ~300 MB |
+| small | high | moderate | ~500 MB |
+| medium | best | slow | ~1.5 GB |
 
-日本語の場合、`small` 以上を推奨します。
+For Japanese, `small` or larger is recommended.
 
-Apple Silicon で `device: "auto"` または `device: "mlx"` の場合、`tiny` / `base` /
-`small` / `medium` / `large` は MLX 用モデルに自動変換されます。たとえば `base` は
-`mlx-community/whisper-base-mlx` として扱われます。
+On Apple Silicon with `device: "auto"` or `device: "mlx"`, model names are automatically
+mapped to their MLX equivalents — e.g. `base` → `mlx-community/whisper-base-mlx`.
 
-音声データと文字起こし結果は外部サーバーに送信しません。ただし、モデルがローカルに
-キャッシュされていない初回起動時は、Whisper モデルのダウンロードが発生する場合があります。
-完全オフラインで使う場合は事前にモデルを取得し、`model` にローカルモデルディレクトリのパスを指定してください。
+Audio and transcription results are never sent to external servers. On first run, Whisper
+model weights will be downloaded if not already cached locally.
 
 ---
 
-## 開発
+## Development
 
 ```bash
-make install   # 依存関係のインストール
-make test      # テストの実行
-make lint      # リントの実行
-make run       # 起動
+make install   # install dependencies (+ LLM model if configured)
+make test      # run tests
+make lint      # run linter
+make run       # start the app
 ```
 
-Python から直接起動する場合は `python -m src.main` を使用します。
+To launch directly: `python -m src.main`
 
-### マイク入力のデバッグ
+### Debugging microphone input
 
-録音結果は Whisper に渡す直前に `debug/last_recording.wav` へ保存されます。
-この WAV が無音の場合、まず macOS の `システム設定 > プライバシーとセキュリティ > マイク` で、
-VoicePaste を起動しているアプリ（Terminal / iTerm / PyCharm / Codex など）にマイク権限があるか確認してください。
+The recording is saved to `debug/last_recording.wav` just before being passed to Whisper.
+If that WAV is silent, check that the application running VoicePaste
+(Terminal / iTerm / etc.) has microphone permission in
+**System Settings → Privacy & Security → Microphone**.
 
-短いマイク診断は次で実行できます。
+Run a short mic check:
 
 ```bash
 make mic-test
 ```
 
-診断音声は `debug/mic_check.wav` に保存されます。
+The test audio is saved to `debug/mic_check.wav`.
 
-入力デバイスを固定したい場合は、`make mic-test` に表示される番号を `config.yaml` の
-`input_device` に指定します。
+To fix a specific input device, set `input_device` in `config.yaml` to the ID shown by `make mic-test`:
 
 ```yaml
-input_device: 1  # 例: MacBook Proのマイク
+input_device: 1
 ```
 
-コントリビュートの前に `AGENTS.md` と `CONTRIBUTING.md` を読んでください。
+Please read `AGENTS.md` and `CONTRIBUTING.md` before contributing.
 
 ---
 
-## ライセンス
+## License
 
 MIT
