@@ -46,6 +46,9 @@ cd voicepaste
 prepare.bat
 ```
 
+> **LLM モデルのダウンロードについて**  
+> `make install` / `prepare.bat` は依存ライブラリのインストール後、`config.yaml` の `formatter.backend` が `"llm"` の場合に LLM モデルを自動でダウンロードします（初回のみ・数分かかります）。`"rule"` の場合はスキップされます。
+
 ### Linux の注意事項
 
 xclip が必要です。
@@ -137,10 +140,10 @@ LLM応答は `{"formatted_text": "..."}` のJSONオブジェクトに限定し�
 
 macOSではMLX版の `mlx-community/gemma-4-e2b-it-4bit` を使用します。Linux / Windowsでは
 `llama-cpp-python` からGGUF版の `mradermacher/gemma-4-E2B-it-GGUF` の `Q4_K_M` を使用します。
-初回実行時はHugging Faceからモデルのダウンロードが発生します。完全オフラインで使う場合は
-事前にモデルを取得し、`model` にローカルの `.gguf` ファイルパス、または利用したいモデルIDを指定してください。
-LLMモデルは `models_dir` 配下に保存され、既定ではプロジェクト直下の `models/` に入ります。
-`models/` の中身は `.gitignore` で除外されます。
+
+`make install` / `prepare.bat` 実行時に自動でダウンロードされます。
+モデルはプロジェクト直下の `models/` に保存され、`models/` の中身は `.gitignore` で除外されます。
+完全オフラインで使う場合は事前にモデルを取得し、`model` にローカルパスまたはモデルIDを指定してください。
 
 ### モデルサイズの目安
 

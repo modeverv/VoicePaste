@@ -12,6 +12,7 @@ else ifeq ($(OS_NAME),Linux)
 else
 	$(PIP) install -r requirements-windows.txt
 endif
+	$(PYTHON) -m src.download
 
 run:
 	$(PYTHON) -m src.main

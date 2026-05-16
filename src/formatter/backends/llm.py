@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import platform
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -24,8 +25,11 @@ STRUCTURED_OUTPUT_SCHEMA: dict[str, Any] = {
 }
 
 
+StatusCallback = Callable[[str], None]
+
+
 class _LLMRunner(Protocol):
-    def load(self) -> None:
+    def load(self, on_status: StatusCallback | None = None) -> None:
         """Download and load the local LLM."""
 
     def generate(self, system_prompt: str, user_prompt: str) -> str:
@@ -42,10 +46,10 @@ class LLMFormatter(PostFormatter):
         self.llm_config = config.llm
         self._runner: _LLMRunner | None = None
 
-    def load(self) -> None:
+    def load(self, on_status: StatusCallback | None = None) -> None:
         """Download and load the local LLM backend."""
 
-        self._get_runner().load()
+        self._get_runner().load(on_status=on_status)
 
     def format(self, text: str) -> str:
         """Format raw Whisper text using a local LLM."""
@@ -154,17 +158,17 @@ class _MlxGemmaRunner:
         self._model_config: Any | None = None
         self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
-    def load(self) -> None:
+    def load(self, on_status: StatusCallback | None = None) -> None:
         """Download and load the MLX model on the dedicated MLX thread."""
 
-        self._executor.submit(self._load_sync).result()
+        self._executor.submit(self._load_sync, on_status).result()
 
     def generate(self, system_prompt: str, user_prompt: str) -> str:
         """Generate text on the dedicated MLX thread."""
 
         return self._executor.submit(self._generate_sync, system_prompt, user_prompt).result()
 
-    def _load_sync(self) -> None:
+    def _load_sync(self, on_status: StatusCallback | None = None) -> None:
         if self._model is not None and self._processor is not None:
             return
         try:
@@ -177,7 +181,9 @@ class _MlxGemmaRunner:
         model_name = self.config.model
         if model_name == "auto":
             model_name = self.config.mlx_model
-        local_model_dir = _resolve_hf_model_dir(model_name, "mlx", self.config)
+        local_model_dir = _resolve_hf_model_dir(model_name, "mlx", self.config, on_status)
+        if on_status:
+            on_status("モデルをメモリに読み込み中...")
         self._model, self._processor = load(local_model_dir)
         self._model_config = self._model.config
 
@@ -214,10 +220,10 @@ class _GgufGemmaRunner:
         self.config = config
         self._llm: Any | None = None
 
-    def load(self) -> None:
+    def load(self, on_status: StatusCallback | None = None) -> None:
         """Download and load the GGUF model."""
 
-        self._load()
+        self._load(on_status)
 
     def generate(self, system_prompt: str, user_prompt: str) -> str:
         """Generate text with llama-cpp-python."""
@@ -236,7 +242,7 @@ class _GgufGemmaRunner:
         )
         return str(response["choices"][0]["message"]["content"])
 
-    def _load(self) -> Any:
+    def _load(self, on_status: StatusCallback | None = None) -> Any:
         if self._llm is None:
             try:
                 from llama_cpp import Llama
@@ -256,6 +262,8 @@ class _GgufGemmaRunner:
                 )
             else:
                 repo_id = self.config.gguf_repo_id if model == "auto" else model
+                if on_status:
+                    on_status(f"モデルをダウンロード中: {repo_id}")
                 self._llm = Llama.from_pretrained(
                     repo_id=repo_id,
                     filename=self.config.gguf_filename,
@@ -268,7 +276,12 @@ class _GgufGemmaRunner:
         return self._llm
 
 
-def _resolve_hf_model_dir(model_id: str, backend: str, config: Any) -> str:
+def _resolve_hf_model_dir(
+    model_id: str,
+    backend: str,
+    config: Any,
+    on_status: StatusCallback | None = None,
+) -> str:
     path = Path(model_id).expanduser()
     if path.exists():
         return str(path)
@@ -280,12 +293,47 @@ def _resolve_hf_model_dir(model_id: str, backend: str, config: Any) -> str:
             "LLM formatter model download requires huggingface-hub. "
             "Install the platform requirements file."
         ) from exc
+
+    if on_status:
+        on_status(f"モデルをダウンロード中: {model_id}")
+
     snapshot_download(
         repo_id=model_id,
         local_dir=str(local_dir),
         local_dir_use_symlinks=False,
+        tqdm_class=_make_tqdm_class(on_status) if on_status else None,
     )
     return str(local_dir)
+
+
+def _make_tqdm_class(on_status: StatusCallback) -> type:
+    """Return a tqdm subclass that routes file-level progress to on_status.
+
+    Inheriting from tqdm.tqdm ensures all internal attributes (total, n, lock,
+    etc.) are properly initialised; we only redirect display output to a
+    StringIO sink and forward the current filename via on_status.
+    """
+    from io import StringIO
+
+    from tqdm import tqdm
+
+    class _StatusTqdm(tqdm):  # type: ignore[misc]
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            kwargs.setdefault("file", StringIO())
+            super().__init__(*args, **kwargs)
+            if self.desc:
+                _notify(self.desc)
+
+        def set_description(self, desc: Any = None, *args: Any, **kwargs: Any) -> None:
+            super().set_description(desc, *args, **kwargs)
+            if desc:
+                _notify(desc)
+
+    def _notify(desc: Any) -> None:
+        filename = Path(str(desc)).name or str(desc)
+        on_status(f"ダウンロード中: {filename}")
+
+    return _StatusTqdm
 
 
 def _model_dir(model_id: str, backend: str, config: Any) -> Path:
@@ -293,3 +341,57 @@ def _model_dir(model_id: str, backend: str, config: Any) -> Path:
     path = Path(config.models_dir) / backend / safe_name
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def download_llm_model(
+    config: Any,
+    on_status: StatusCallback | None = None,
+) -> None:
+    """Download the LLM model files without loading them into memory.
+
+    Reads backend / model settings from *config* (a FormatterConfig or its
+    .llm sub-config) and fetches the required files from Hugging Face into
+    the configured models_dir.  Safe to call when files are already present
+    — huggingface_hub will skip files that match the cached etag.
+    """
+    from src.config import FormatterConfig
+
+    llm_cfg = config.llm if isinstance(config, FormatterConfig) else config
+
+    backend = llm_cfg.backend.lower()
+    if backend == "auto":
+        backend = "mlx" if platform.system() == "Darwin" else "gguf"
+
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError as exc:  # pragma: no cover
+        raise RuntimeError(
+            "モデルのダウンロードには huggingface-hub が必要です。"
+            "requirements ファイルをインストールしてください。"
+        ) from exc
+
+    tqdm_cls = _make_tqdm_class(on_status) if on_status else None
+
+    if backend == "mlx":
+        model_id = llm_cfg.mlx_model if llm_cfg.model in ("", "auto") else llm_cfg.model
+        local_dir = _model_dir(model_id, "mlx", llm_cfg)
+        if on_status:
+            on_status(f"モデルをダウンロード中: {model_id}")
+        snapshot_download(
+            repo_id=model_id,
+            local_dir=str(local_dir),
+            local_dir_use_symlinks=False,
+            tqdm_class=tqdm_cls,
+        )
+    elif backend == "gguf":
+        repo_id = llm_cfg.gguf_repo_id if llm_cfg.model in ("", "auto") else llm_cfg.model
+        local_dir = _model_dir(repo_id, "gguf", llm_cfg)
+        if on_status:
+            on_status(f"モデルをダウンロード中: {repo_id}")
+        snapshot_download(
+            repo_id=repo_id,
+            local_dir=str(local_dir),
+            local_dir_use_symlinks=False,
+            allow_patterns=[llm_cfg.gguf_filename],
+            tqdm_class=tqdm_cls,
+        )

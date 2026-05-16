@@ -265,7 +265,7 @@ def test_llm_formatter_load_preloads_runner() -> None:
             super().__init__('{"formatted_text": "unused"}')
             self.load_called = False
 
-        def load(self) -> None:
+        def load(self, on_status=None) -> None:
             self.load_called = True
 
     runner = LoadableRunner()

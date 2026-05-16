@@ -123,7 +123,10 @@ def test_render_includes_loading_status() -> None:
     assert "Loading model" in str(rendered.renderable.renderables[2])
 
 
-def test_load_quietly_suppresses_backend_output(capsys: object) -> None:
+def test_run_suppresses_backend_output_during_load(capsys: object) -> None:
+    from contextlib import redirect_stderr, redirect_stdout
+    from io import StringIO
+
     class NoisyTranscriber(FakeTranscriber):
         def __init__(self) -> None:
             super().__init__()
@@ -131,7 +134,8 @@ def test_load_quietly_suppresses_backend_output(capsys: object) -> None:
 
     app = VoicePasteApp(Config(), transcriber=NoisyTranscriber(), clipboard_writer=Mock())
 
-    app._load_quietly()
+    with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+        app.load()
     captured = capsys.readouterr()
 
     assert captured.out == ""
