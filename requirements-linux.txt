@@ -1,0 +1,10 @@
+sounddevice
+numpy
+pynput
+rich
+pyyaml
+faster-whisper
+pytest
+pytest-cov
+ruff
+

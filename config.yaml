@@ -1,0 +1,22 @@
+hotkey: "<cmd>+<shift>+space"
+model: "base"
+language: "ja"
+device: "auto"
+chunk_seconds: 3
+formatter:
+  backend: "rule"
+  remove_fillers: true
+  add_punctuation: true
+  fillers:
+    - "あー"
+    - "えっと"
+    - "なんか"
+    - "えー"
+    - "あの"
+    - "まあ"
+    - "ちょっと待って"
+  llm:
+    endpoint: "http://localhost:1234/v1"
+    model: "auto"
+    prompt: ""
+
