@@ -13,6 +13,7 @@ AquaVoice要らず。サブスク不要。データはあなたのマシンか�
 - **高速** : macOS Apple Silicon では mlx-whisper、その他は faster-whisper を使用
 - **TUI** : ターミナルにリアルタイムで状態を表示する
 - **シンプル** : クリップボードに入れるだけ。ペーストのタイミングは自分で決める
+- **LLM整形** : 確定Whisper結果をローカルGemma 4 E2Bで自然な文章へ整形できる
 
 ---
 
@@ -99,7 +100,7 @@ language: "ja"                   # 文字起こし言語
 device: "auto"                   # auto / cpu / cuda / mlx
 chunk_seconds: 3                 # 暫定表示のチャンク秒数
 formatter:
-  backend: "rule"                # rule / llm（llmは現時点でstub）
+  backend: "rule"                # rule / llm
   remove_fillers: true           # あー・えっと等を除去する
   add_punctuation: true          # 句読点を補完する
   fillers:
@@ -111,10 +112,32 @@ formatter:
     - "まあ"
     - "ちょっと待って"
   llm:
-    endpoint: "http://localhost:1234/v1"
-    model: "auto"
-    prompt: ""
+    prompt: |
+      あなたは音声入力の確定テキストを整形する編集者です。
+      Whisperの文字起こし結果を、意味を変えずに読みやすい日本語へ整えてください。
+      フィラー、言い直し、余分な空白を削り、必要な句読点を補ってください。
+      固有名詞、数値、コード、URLは推測で変更しないでください。
+    backend: "auto"              # auto / mlx / gguf
+    mlx_model: "mlx-community/gemma-4-e2b-it-4bit"
+    gguf_repo_id: "mradermacher/gemma-4-E2B-it-GGUF"
+    gguf_filename: "*Q4_K_M.gguf"
+    max_tokens: 256
+    temperature: 0.0
+    n_ctx: 4096
+    n_gpu_layers: -1
 ```
+
+### LLM整形
+
+`formatter.backend: "llm"` にすると、録音終了後の確定Whisper結果だけをローカルLLMで整形します。
+録音中の暫定表示は速度優先のためLLM整形しません。
+LLM応答は `{"formatted_text": "..."}` のJSONオブジェクトに限定し、余分なキーや自由文はエラーとして扱います。
+システムプロンプトは `formatter.llm.prompt` に直接記述します。
+
+macOSではMLX版の `mlx-community/gemma-4-e2b-it-4bit` を使用します。Linux / Windowsでは
+`llama-cpp-python` からGGUF版の `mradermacher/gemma-4-E2B-it-GGUF` の `Q4_K_M` を使用します。
+初回実行時はHugging Faceからモデルのダウンロードが発生します。完全オフラインで使う場合は
+事前にモデルを取得し、`model` にローカルの `.gguf` ファイルパス、または利用したいモデルIDを指定してください。
 
 ### モデルサイズの目安
 

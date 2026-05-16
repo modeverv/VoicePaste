@@ -8,7 +8,7 @@ sample_rate: 16000
 chunk_seconds: 3
 debug_audio_path: "debug/last_recording.wav"
 formatter:
-  backend: "rule"
+  backend: "llm" # "rule" or "llm"
   remove_fillers: true
   add_punctuation: true
   fillers:
@@ -20,6 +20,16 @@ formatter:
     - "まあ"
     - "ちょっと待って"
   llm:
-    endpoint: "http://localhost:1234/v1"
-    model: "auto"
-    prompt: ""
+    prompt: |
+      あなたは音声入力の確定テキストを整形する編集者です。
+      Whisperの文字起こし結果を、意味を変えずに読みやすい日本語へ整えてください。
+      フィラー、言い直し、余分な空白を削り、必要な句読点を補ってください。
+      固有名詞、数値、コード、URLは推測で変更しないでください。
+    backend: "auto"
+    mlx_model: "mlx-community/gemma-4-e2b-it-4bit"
+    gguf_repo_id: "mradermacher/gemma-4-E2B-it-GGUF"
+    gguf_filename: "*Q4_K_M.gguf"
+    max_tokens: 256
+    temperature: 0.0
+    n_ctx: 4096
+    n_gpu_layers: -1

@@ -95,13 +95,13 @@ python -c "from src.clipboard import copy_to_clipboard; copy_to_clipboard('test'
 
 ## フェーズ 3 : formatter.py
 
-**目標** : `PostFormatter` 抽象インターフェースと `RuleFormatter` を実装する。`LLMFormatter` はstubとして置く。
+**目標** : `PostFormatter` 抽象インターフェースと `RuleFormatter` を実装する。`LLMFormatter` はローカルGemma 4 E2Bで確定Whisper結果を整形する。
 
 ### タスク
 
 - [ ] `src/formatter.py` を実装する（`PostFormatter` 抽象基底クラス・ファクトリ関数）
 - [ ] `src/formatter/backends/rule.py` を実装する（`RuleFormatter`）
-- [ ] `src/formatter/backends/llm.py` を作成する（`LLMFormatter` stub）
+- [ ] `src/formatter/backends/llm.py` を作成する（macOSはMLX、その他はGGUF）
 - [ ] フィラーリストを config から受け取る
 - [ ] 正規表現でフィラーを除去する
 - [ ] 文末句読点を補完する
@@ -122,22 +122,26 @@ fmt.format("えっとこれはテストです")   # → "これはテストで�
 fmt.format("あーなんか良い感じですね") # → "良い感じですね。"
 ```
 
-### LLMFormatter stub
+### LLMFormatter
 
 ```python
 class LLMFormatter(PostFormatter):
     def format(self, text: str) -> str:
-        raise NotImplementedError("LLMFormatter is not yet implemented.")
+        ...
 ```
 
-stubが `NotImplementedError` を上げることをテストで確認する。
+macOSでは `mlx-vlm` と `mlx-community/gemma-4-e2b-it-4bit` を使用する。
+Linux / Windowsでは `llama-cpp-python` と `mradermacher/gemma-4-E2B-it-GGUF` の
+`Q4_K_M` を使用する。外部依存はテストで必ずモックする。
+システムプロンプトは `formatter.llm.prompt` に直接記述する。
+LLM応答は `formatted_text` のみを持つJSONオブジェクトに限定し、自由文応答は受け入れない。
 
 ### 完了条件
 
 ```bash
 make test  # test_formatter.py がパスする
 # backend: "rule" → RuleFormatter が動作する
-# backend: "llm"  → NotImplementedError が上がる
+# backend: "llm"  → ローカルLLMで確定テキストが整形される
 ```
 
 ---

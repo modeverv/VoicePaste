@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.config import DEFAULT_FILLERS, load_config
+from src.config import DEFAULT_FILLERS, DEFAULT_LLM_PROMPT, load_config
 
 
 def test_load_config_defaults_when_file_missing(tmp_path: Path) -> None:
@@ -18,6 +18,11 @@ def test_load_config_defaults_when_file_missing(tmp_path: Path) -> None:
     assert config.debug_audio_path == "debug/last_recording.wav"
     assert config.formatter.backend == "rule"
     assert config.formatter.fillers == DEFAULT_FILLERS
+    assert config.formatter.llm.backend == "auto"
+    assert config.formatter.llm.prompt == DEFAULT_LLM_PROMPT
+    assert config.formatter.llm.mlx_model == "mlx-community/gemma-4-e2b-it-4bit"
+    assert config.formatter.llm.gguf_repo_id == "mradermacher/gemma-4-E2B-it-GGUF"
+    assert config.formatter.llm.gguf_filename == "*Q4_K_M.gguf"
 
 
 def test_load_config_merges_partial_yaml(tmp_path: Path) -> None:
@@ -34,7 +39,14 @@ formatter:
   backend: llm
   remove_fillers: false
   llm:
+    backend: gguf
     model: japanese-editor
+    prompt: custom prompt
+    gguf_filename: "*Q5_K_M.gguf"
+    max_tokens: 128
+    temperature: 0.1
+    n_ctx: 2048
+    n_gpu_layers: 0
 """,
         encoding="utf-8",
     )
@@ -51,5 +63,12 @@ formatter:
     assert config.formatter.backend == "llm"
     assert config.formatter.remove_fillers is False
     assert config.formatter.add_punctuation is True
+    assert config.formatter.llm.backend == "gguf"
     assert config.formatter.llm.model == "japanese-editor"
+    assert config.formatter.llm.prompt == "custom prompt"
     assert config.formatter.llm.endpoint == "http://localhost:1234/v1"
+    assert config.formatter.llm.gguf_filename == "*Q5_K_M.gguf"
+    assert config.formatter.llm.max_tokens == 128
+    assert config.formatter.llm.temperature == 0.1
+    assert config.formatter.llm.n_ctx == 2048
+    assert config.formatter.llm.n_gpu_layers == 0

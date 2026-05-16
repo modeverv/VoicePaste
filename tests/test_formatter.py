@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import sys
+import types
+from typing import Any
+
 import pytest
 
-from src.config import FormatterConfig
+from src.config import FormatterConfig, LLMFormatterConfig
 from src.formatter import PostFormatter
 from src.formatter.backends.llm import LLMFormatter
 from src.formatter.backends.rule import RuleFormatter
@@ -59,8 +63,180 @@ def test_rule_formatter_inserts_comma_for_long_sentence() -> None:
     assert formatted.replace("、", "").removesuffix("。") == text
 
 
-def test_llm_formatter_stub_raises() -> None:
+class FakeRunner:
+    def __init__(self, output: str) -> None:
+        self.output = output
+        self.calls: list[tuple[str, str]] = []
+
+    def generate(self, system_prompt: str, user_prompt: str) -> str:
+        self.calls.append((system_prompt, user_prompt))
+        return self.output
+
+
+def test_llm_formatter_uses_runner_and_parses_structured_output() -> None:
+    runner = FakeRunner('{"formatted_text": "これはテストです。"}')
+    formatter = LLMFormatter(FormatterConfig(backend="llm"))
+    formatter._runner = runner
+
+    assert formatter.format("  えっとこれはテストです  ") == "これはテストです。"
+    assert "formatted_text" in runner.calls[0][0]
+    assert "Whisper文字起こし結果" in runner.calls[0][1]
+
+
+def test_llm_formatter_uses_prompt_from_config() -> None:
+    runner = FakeRunner('{"formatted_text": "これはテストです。"}')
+    formatter = LLMFormatter(
+        FormatterConfig(
+            backend="llm",
+            llm=LLMFormatterConfig(prompt="config側プロンプトです。"),
+        )
+    )
+    formatter._runner = runner
+
+    assert formatter.format("えっとこれはテストです") == "これはテストです。"
+    assert runner.calls[0][0].startswith("config側プロンプトです。")
+
+
+def test_llm_formatter_errors_when_prompt_is_empty() -> None:
+    formatter = LLMFormatter(
+        FormatterConfig(
+            backend="llm",
+            llm=LLMFormatterConfig(prompt=""),
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="prompt is empty"):
+        formatter.format("テスト")
+
+
+def test_llm_formatter_allows_json_code_fence() -> None:
+    runner = FakeRunner('```json\n{"formatted_text": "これはテストです。"}\n```')
+    formatter = LLMFormatter(FormatterConfig(backend="llm"))
+    formatter._runner = runner
+
+    assert formatter.format("えっとこれはテストです") == "これはテストです。"
+
+
+def test_llm_formatter_rejects_unstructured_output() -> None:
+    runner = FakeRunner("これはテストです。")
+    formatter = LLMFormatter(FormatterConfig(backend="llm"))
+    formatter._runner = runner
+
+    with pytest.raises(RuntimeError, match="invalid structured JSON"):
+        formatter.format("えっとこれはテストです")
+
+
+def test_llm_formatter_rejects_extra_json_keys() -> None:
+    runner = FakeRunner('{"formatted_text": "これはテストです。", "notes": "removed filler"}')
+    formatter = LLMFormatter(FormatterConfig(backend="llm"))
+    formatter._runner = runner
+
+    with pytest.raises(RuntimeError, match="only formatted_text"):
+        formatter.format("えっとこれはテストです")
+
+
+def test_llm_formatter_empty_input_skips_runner() -> None:
+    runner = FakeRunner("should not be used")
+    formatter = LLMFormatter(FormatterConfig(backend="llm"))
+    formatter._runner = runner
+
+    assert formatter.format("   ") == ""
+    assert runner.calls == []
+
+
+def test_llm_formatter_rejects_unknown_backend() -> None:
+    formatter = LLMFormatter(
+        FormatterConfig(backend="llm", llm=LLMFormatterConfig(backend="unknown"))
+    )
+
+    with pytest.raises(ValueError, match="Unknown LLM formatter backend"):
+        formatter.format("テスト")
+
+
+def test_llm_formatter_auto_backend_uses_mlx_on_darwin(monkeypatch: pytest.MonkeyPatch) -> None:
     formatter = LLMFormatter(FormatterConfig(backend="llm"))
 
-    with pytest.raises(NotImplementedError, match="not yet implemented"):
-        formatter.format("テスト")
+    monkeypatch.setattr("platform.system", lambda: "Darwin")
+
+    assert formatter._create_runner().__class__.__name__ == "_MlxGemmaRunner"
+
+
+def test_llm_formatter_auto_backend_uses_gguf_elsewhere(monkeypatch: pytest.MonkeyPatch) -> None:
+    formatter = LLMFormatter(FormatterConfig(backend="llm"))
+
+    monkeypatch.setattr("platform.system", lambda: "Linux")
+
+    assert formatter._create_runner().__class__.__name__ == "_GgufGemmaRunner"
+
+
+def test_mlx_runner_loads_configured_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict[str, Any] = {}
+    fake_model = types.SimpleNamespace(config=types.SimpleNamespace())
+    fake_mlx_vlm = types.ModuleType("mlx_vlm")
+    fake_prompt_utils = types.ModuleType("mlx_vlm.prompt_utils")
+
+    def fake_load(model_name: str) -> tuple[Any, Any]:
+        calls["model_name"] = model_name
+        return fake_model, object()
+
+    def fake_generate(*args: Any, **kwargs: Any) -> str:
+        calls["generate_kwargs"] = kwargs
+        return '{"formatted_text": "整形済みです。"}'
+
+    def fake_apply_chat_template(*args: Any, **kwargs: Any) -> str:
+        calls["template_args"] = args
+        return "templated prompt"
+
+    fake_mlx_vlm.load = fake_load
+    fake_mlx_vlm.generate = fake_generate
+    fake_prompt_utils.apply_chat_template = fake_apply_chat_template
+    monkeypatch.setitem(sys.modules, "mlx_vlm", fake_mlx_vlm)
+    monkeypatch.setitem(sys.modules, "mlx_vlm.prompt_utils", fake_prompt_utils)
+
+    formatter = LLMFormatter(
+        FormatterConfig(
+            backend="llm",
+            llm=LLMFormatterConfig(backend="mlx", mlx_model="mlx-community/test-model"),
+        )
+    )
+
+    assert formatter.format("えっとテスト") == "整形済みです。"
+    assert calls["model_name"] == "mlx-community/test-model"
+    assert calls["generate_kwargs"]["temperature"] == 0.0
+
+
+def test_gguf_runner_loads_configured_repo(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict[str, Any] = {}
+    fake_llama_cpp = types.ModuleType("llama_cpp")
+
+    class FakeLlama:
+        @classmethod
+        def from_pretrained(cls, **kwargs: Any) -> FakeLlama:
+            calls["from_pretrained"] = kwargs
+            return cls()
+
+        def create_chat_completion(self, **kwargs: Any) -> dict[str, Any]:
+            calls["chat"] = kwargs
+            return {
+                "choices": [{"message": {"content": '{"formatted_text": "これはテストです。"}'}}]
+            }
+
+    fake_llama_cpp.Llama = FakeLlama
+    monkeypatch.setitem(sys.modules, "llama_cpp", fake_llama_cpp)
+
+    formatter = LLMFormatter(
+        FormatterConfig(
+            backend="llm",
+            llm=LLMFormatterConfig(
+                backend="gguf",
+                gguf_repo_id="example/gemma-gguf",
+                gguf_filename="*Q4_K_M.gguf",
+            ),
+        )
+    )
+
+    assert formatter.format("えっとこれはテストです") == "これはテストです。"
+    assert calls["from_pretrained"]["repo_id"] == "example/gemma-gguf"
+    assert calls["from_pretrained"]["filename"] == "*Q4_K_M.gguf"
+    assert calls["chat"]["temperature"] == 0.0
+    assert calls["chat"]["response_format"]["schema"]["required"] == ["formatted_text"]

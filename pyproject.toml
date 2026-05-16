@@ -16,7 +16,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov", "ruff"]
-darwin-arm64 = ["mlx-whisper"]
+darwin-arm64 = ["mlx-whisper", "mlx-vlm"]
+llm-gguf = ["llama-cpp-python", "huggingface-hub"]
 whisper = ["faster-whisper"]
 
 [project.scripts]
@@ -32,4 +33,3 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --cov=src --cov-report=term-missing --cov-fail-under=80"
-

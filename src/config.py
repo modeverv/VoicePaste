@@ -9,16 +9,30 @@ from typing import Any, TypeAlias
 import yaml
 
 DEFAULT_FILLERS = ["あー", "えっと", "なんか", "えー", "あの", "まあ", "ちょっと待って"]
+DEFAULT_LLM_PROMPT = """\
+あなたは音声入力の確定テキストを整形する編集者です。
+Whisperの文字起こし結果を、意味を変えずに読みやすい日本語へ整えてください。
+フィラー、言い直し、余分な空白を削り、必要な句読点を補ってください。
+固有名詞、数値、コード、URLは推測で変更しないでください。
+"""
 InputDevice: TypeAlias = int | str | None
 
 
 @dataclass(frozen=True)
 class LLMFormatterConfig:
-    """Configuration for the future local LLM formatter backend."""
+    """Configuration for the local LLM formatter backend."""
 
     endpoint: str = "http://localhost:1234/v1"
     model: str = "auto"
-    prompt: str = ""
+    prompt: str = DEFAULT_LLM_PROMPT
+    backend: str = "auto"
+    mlx_model: str = "mlx-community/gemma-4-e2b-it-4bit"
+    gguf_repo_id: str = "mradermacher/gemma-4-E2B-it-GGUF"
+    gguf_filename: str = "*Q4_K_M.gguf"
+    max_tokens: int = 256
+    temperature: float = 0.0
+    n_ctx: int = 4096
+    n_gpu_layers: int = -1
 
 
 @dataclass(frozen=True)
@@ -100,6 +114,14 @@ def load_config(path: str | Path = "config.yaml") -> Config:
         endpoint=str(llm_raw.get("endpoint", defaults.formatter.llm.endpoint)),
         model=str(llm_raw.get("model", defaults.formatter.llm.model)),
         prompt=str(llm_raw.get("prompt", defaults.formatter.llm.prompt)),
+        backend=str(llm_raw.get("backend", defaults.formatter.llm.backend)),
+        mlx_model=str(llm_raw.get("mlx_model", defaults.formatter.llm.mlx_model)),
+        gguf_repo_id=str(llm_raw.get("gguf_repo_id", defaults.formatter.llm.gguf_repo_id)),
+        gguf_filename=str(llm_raw.get("gguf_filename", defaults.formatter.llm.gguf_filename)),
+        max_tokens=int(llm_raw.get("max_tokens", defaults.formatter.llm.max_tokens)),
+        temperature=float(llm_raw.get("temperature", defaults.formatter.llm.temperature)),
+        n_ctx=int(llm_raw.get("n_ctx", defaults.formatter.llm.n_ctx)),
+        n_gpu_layers=int(llm_raw.get("n_gpu_layers", defaults.formatter.llm.n_gpu_layers)),
     )
     formatter = FormatterConfig(
         backend=str(formatter_raw.get("backend", defaults.formatter.backend)),

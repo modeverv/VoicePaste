@@ -4,7 +4,8 @@ pynput
 rich
 pyyaml
 faster-whisper
+llama-cpp-python
+huggingface-hub
 pytest
 pytest-cov
 ruff
-

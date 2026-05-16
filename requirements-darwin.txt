@@ -4,8 +4,8 @@ pynput
 rich
 pyyaml
 mlx-whisper; platform_machine == "arm64"
+mlx-vlm; platform_machine == "arm64"
 faster-whisper; platform_machine != "arm64"
 pytest
 pytest-cov
 ruff
-

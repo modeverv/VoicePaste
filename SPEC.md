@@ -24,7 +24,7 @@ VoicePaste は、音声入力をローカルWhisperで文字起こしし、ク�
 |----|------|------|
 | F-01 | 音声録音 | グローバルホットキー押下中に録音する（Push-to-Talk方式） |
 | F-02 | 文字起こし | ローカルWhisperモデルで文字起こしする |
-| F-03 | テキスト整形 | ルールベースでフィラー除去・句読点補完を行う |
+| F-03 | テキスト整形 | ルールベース、またはローカルLLMでフィラー除去・句読点補完を行う |
 | F-04 | クリップボード出力 | 整形済みテキストをOSのクリップボードに書き込む |
 | F-05 | TUI表示 | 現在の状態をターミナルにリアルタイム表示する |
 | F-06 | グローバルホットキー | アプリのフォーカスに依存しないホットキーで録音開始・停止する |
@@ -64,7 +64,7 @@ src/
 ├── formatter.py          # Formatterインターフェース定義・ファクトリ関数
 │   └── backends/
 │       ├── rule.py       # ルールベース整形（デフォルト）
-│       └── llm.py        # ローカルLLM整形（将来実装・現時点でstub）
+│       └── llm.py        # ローカルLLM整形（Gemma 4 E2B）
 ├── clipboard.py          # OSクリップボード書き込み
 ├── hotkey.py             # pynputによるグローバルホットキー
 └── config.py             # config.yaml の読み込み
@@ -87,7 +87,7 @@ src/
                           → Whisper(full)
                           → PostFormatter（抽象インターフェース）
                           │   ├── RuleFormatter（デフォルト）
-                          │   └── LLMFormatter（将来実装）
+                          │   └── LLMFormatter（Gemma 4 E2B ローカル整形）
                           → TUI確定表示（通常色）
                           → pbcopy
 ```
@@ -134,10 +134,22 @@ formatter:
     - "あの"
     - "まあ"
     - "ちょっと待って"
-  llm:                           # llm バックエンド時の設定（将来用）
+  llm:                           # llm バックエンド時の設定
     endpoint: "http://localhost:1234/v1"  # LM Studio等のOpenAI互換エンドポイント
     model: "auto"                # 使用するモデル名（autoでエンドポイントのデフォルト）
-    prompt: ""                   # カスタムシステムプロンプト（空でデフォルト使用）
+    prompt: |                    # システムプロンプト
+      あなたは音声入力の確定テキストを整形する編集者です。
+      Whisperの文字起こし結果を、意味を変えずに読みやすい日本語へ整えてください。
+      フィラー、言い直し、余分な空白を削り、必要な句読点を補ってください。
+      固有名詞、数値、コード、URLは推測で変更しないでください。
+    backend: "auto"              # auto / mlx / gguf
+    mlx_model: "mlx-community/gemma-4-e2b-it-4bit"
+    gguf_repo_id: "mradermacher/gemma-4-E2B-it-GGUF"
+    gguf_filename: "*Q4_K_M.gguf"
+    max_tokens: 256
+    temperature: 0.0
+    n_ctx: 4096
+    n_gpu_layers: -1
 ```
 
 ---
@@ -200,7 +212,7 @@ Richライブラリを使用する。フローティングウィンドウでは�
 
 ## PostFormatter 仕様
 
-全体処理（録音終了後）のテキスト整形を担う抽象インターフェース。将来のLLMバックエンド追加を見越して、最初から差し替え可能な構造にする。
+全体処理（録音終了後）のテキスト整形を担う抽象インターフェース。ルールベースとローカルLLMバックエンドを差し替え可能な構造にする。
 
 ### インターフェース定義
 
@@ -251,28 +263,31 @@ class RuleFormatter(PostFormatter):
 - Whisper出力に句読点がない場合、文末に「。」を付与する
 - 長文（句点なしで50文字超）は読点「、」を推定位置に補完する（オプション）
 
-### LLMFormatter（将来実装・現時点でstub）
+### LLMFormatter
 
 ```python
 class LLMFormatter(PostFormatter):
-    """ローカルLLMによる整形。LM Studio等のOpenAI互換エンドポイントを使用。"""
+    """ローカルLLMによる確定Whisperテキスト整形。"""
 
     def format(self, text: str) -> str:
-        raise NotImplementedError("LLMFormatter is not yet implemented.")
+        ...
 ```
 
-将来の実装方針：
+実装方針：
 
-- LM Studio / Ollama 等のOpenAI互換エンドポイントに投げる
-- システムプロンプトでフィラー除去・整文・句読点補完を指示する
-- ネットワーク不可時はRuleFormatterにフォールバックする
-- タイムアウトを設けてレイテンシの劣化を防ぐ
+- macOSは `mlx-vlm` と `mlx-community/gemma-4-e2b-it-4bit` を使用する
+- Linux / Windowsは `llama-cpp-python` と `mradermacher/gemma-4-E2B-it-GGUF` の `Q4_K_M` を使用する
+- 初回実行時はHugging Faceからモデルを取得し、以後はローカルキャッシュを使用する
+- 録音中のチャンク暫定表示には適用せず、確定Whisper結果だけを整形する
+- システムプロンプトは `formatter.llm.prompt` に直接記述する
+- LLM応答は `{"formatted_text": "..."}` のJSONオブジェクトに限定し、余分なキーや自由文は失敗として扱う
+- GGUF backendでは `response_format` にJSON Schemaを渡して生成を制約する
 
 ---
 
 ## 将来の拡張（スコープ外）
 
-- `LLMFormatter` の実装（エンドポイント・プロンプトはconfig.yamlで管理）
+- OpenAI互換サーバー経由の任意ローカルLLM整形
 - 文字起こし履歴のログ保存
 - GUIフロントエンド
 - Whisper以外のSTTバックエンド対応（Vosk等）
