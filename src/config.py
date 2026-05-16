@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeAlias
 
 import yaml
 
 DEFAULT_FILLERS = ["あー", "えっと", "なんか", "えー", "あの", "まあ", "ちょっと待って"]
+InputDevice: TypeAlias = int | str | None
 
 
 @dataclass(frozen=True)
@@ -39,12 +40,40 @@ class Config:
     model: str = "base"
     language: str = "ja"
     device: str = "auto"
+    input_device: InputDevice = None
+    input_sample_rate: int | str = "auto"
+    sample_rate: int = 16000
     chunk_seconds: int = 3
+    debug_audio_path: str = "debug/last_recording.wav"
     formatter: FormatterConfig = field(default_factory=FormatterConfig)
 
 
 def _as_mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _parse_input_device(value: Any) -> InputDevice:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    text = str(value).strip()
+    if not text or text.lower() in {"auto", "default", "none", "null"}:
+        return None
+    if text.isdigit():
+        return int(text)
+    return text
+
+
+def _parse_input_sample_rate(value: Any) -> int | str:
+    if value is None:
+        return "auto"
+    if isinstance(value, int):
+        return value
+    text = str(value).strip().lower()
+    if text in {"", "auto", "default"}:
+        return "auto"
+    return int(text)
 
 
 def load_config(path: str | Path = "config.yaml") -> Config:
@@ -86,6 +115,12 @@ def load_config(path: str | Path = "config.yaml") -> Config:
         model=str(raw.get("model", defaults.model)),
         language=str(raw.get("language", defaults.language)),
         device=str(raw.get("device", defaults.device)),
+        input_device=_parse_input_device(raw.get("input_device", defaults.input_device)),
+        input_sample_rate=_parse_input_sample_rate(
+            raw.get("input_sample_rate", defaults.input_sample_rate)
+        ),
+        sample_rate=int(raw.get("sample_rate", defaults.sample_rate)),
         chunk_seconds=int(raw.get("chunk_seconds", defaults.chunk_seconds)),
+        debug_audio_path=str(raw.get("debug_audio_path", defaults.debug_audio_path)),
         formatter=formatter,
     )

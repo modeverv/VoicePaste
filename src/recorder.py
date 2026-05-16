@@ -11,6 +11,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 AudioArray = NDArray[np.float32]
+InputDevice = int | str | None
 
 
 class Recorder:
@@ -19,23 +20,30 @@ class Recorder:
     def __init__(
         self,
         sample_rate: int = 16000,
+        input_sample_rate: int | str = "auto",
         chunk_seconds: int = 3,
         chunk_queue: queue.Queue[AudioArray] | None = None,
         channels: int = 1,
+        device: InputDevice = None,
     ) -> None:
         """Create a recorder.
 
         Args:
-            sample_rate: Audio sample rate in Hz.
+            sample_rate: Output audio sample rate in Hz for Whisper.
+            input_sample_rate: Input device sample rate, or "auto" for device default.
             chunk_seconds: Seconds per preview chunk.
             chunk_queue: Queue that receives chunk arrays.
             channels: Input channel count.
+            device: Optional sounddevice input device index or name.
         """
 
         self.sample_rate = sample_rate
+        self.input_sample_rate = input_sample_rate
         self.chunk_seconds = chunk_seconds
         self.chunk_queue = chunk_queue or queue.Queue()
         self.channels = channels
+        self.device = device
+        self._capture_sample_rate = sample_rate
         self._chunk_frames = sample_rate * chunk_seconds
         self._full_buffer: list[AudioArray] = []
         self._chunk_buffer: list[AudioArray] = []
@@ -57,13 +65,16 @@ class Recorder:
             return
         import sounddevice as sd
 
+        self._capture_sample_rate = self._resolve_capture_sample_rate(sd)
+        self._chunk_frames = self._capture_sample_rate * self.chunk_seconds
         with self._lock:
             self._full_buffer = []
             self._chunk_buffer = []
             self._chunk_frame_count = 0
             self._recording = True
         self._stream = sd.InputStream(
-            samplerate=self.sample_rate,
+            samplerate=self._capture_sample_rate,
+            device=self.device,
             channels=self.channels,
             dtype="float32",
             callback=self._callback,
@@ -79,9 +90,9 @@ class Recorder:
             self._stream = None
         with self._lock:
             self._recording = False
-            full = self._concat(self._full_buffer)
+            full = self._to_output_rate(self._concat(self._full_buffer))
             if self._chunk_buffer:
-                self.chunk_queue.put(self._concat(self._chunk_buffer))
+                self.chunk_queue.put(self._to_output_rate(self._concat(self._chunk_buffer)))
                 self._chunk_buffer = []
                 self._chunk_frame_count = 0
             return full
@@ -102,7 +113,7 @@ class Recorder:
             self._chunk_buffer.append(mono.copy())
             self._chunk_frame_count += frames
             if self._chunk_frame_count >= self._chunk_frames:
-                self.chunk_queue.put(self._concat(self._chunk_buffer))
+                self.chunk_queue.put(self._to_output_rate(self._concat(self._chunk_buffer)))
                 self._chunk_buffer = []
                 self._chunk_frame_count = 0
 
@@ -128,3 +139,18 @@ class Recorder:
         if not parts:
             return np.array([], dtype=np.float32)
         return np.concatenate(parts).astype(np.float32, copy=False)
+
+    def _resolve_capture_sample_rate(self, sounddevice: Any) -> int:
+        if self.input_sample_rate != "auto":
+            return int(self.input_sample_rate)
+        device_info = sounddevice.query_devices(self.device, "input")
+        return int(device_info["default_samplerate"])
+
+    def _to_output_rate(self, audio: AudioArray) -> AudioArray:
+        if audio.size == 0 or self._capture_sample_rate == self.sample_rate:
+            return audio.astype(np.float32, copy=False)
+        duration = audio.size / self._capture_sample_rate
+        output_size = max(1, int(round(duration * self.sample_rate)))
+        source_positions = np.linspace(0, audio.size - 1, num=audio.size)
+        target_positions = np.linspace(0, audio.size - 1, num=output_size)
+        return np.interp(target_positions, source_positions, audio).astype(np.float32)

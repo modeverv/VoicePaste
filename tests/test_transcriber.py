@@ -76,9 +76,26 @@ def test_mlx_backend_transcribes_text(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.backends.mlx import MLXWhisperBackend
 
     transcribe = Mock(return_value={"text": " テスト "})
+    model_holder = SimpleNamespace(get_model=Mock())
     monkeypatch.setitem(sys.modules, "mlx_whisper", SimpleNamespace(transcribe=transcribe))
+    monkeypatch.setitem(
+        sys.modules,
+        "mlx_whisper.transcribe",
+        SimpleNamespace(ModelHolder=model_holder),
+    )
+    monkeypatch.setitem(sys.modules, "mlx.core", SimpleNamespace(float16="float16"))
     backend = MLXWhisperBackend("base", "auto", "ja")
 
     backend.load()
 
+    model_holder.get_model.assert_called_once_with("mlx-community/whisper-base-mlx", "float16")
     assert backend.transcribe_chunk(np.zeros(10, dtype=np.float32)) == "テスト"
+    transcribe.assert_called_once()
+    assert transcribe.call_args.kwargs["path_or_hf_repo"] == "mlx-community/whisper-base-mlx"
+
+
+def test_mlx_backend_preserves_custom_model_path() -> None:
+    from src.backends.mlx import resolve_mlx_model_name
+
+    assert resolve_mlx_model_name("/models/whisper-base-mlx") == "/models/whisper-base-mlx"
+    assert resolve_mlx_model_name("org/custom-model") == "org/custom-model"

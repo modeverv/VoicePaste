@@ -127,6 +127,14 @@ formatter:
 
 日本語の場合、`small` 以上を推奨します。
 
+Apple Silicon で `device: "auto"` または `device: "mlx"` の場合、`tiny` / `base` /
+`small` / `medium` / `large` は MLX 用モデルに自動変換されます。たとえば `base` は
+`mlx-community/whisper-base-mlx` として扱われます。
+
+音声データと文字起こし結果は外部サーバーに送信しません。ただし、モデルがローカルに
+キャッシュされていない初回起動時は、Whisper モデルのダウンロードが発生する場合があります。
+完全オフラインで使う場合は事前にモデルを取得し、`model` にローカルモデルディレクトリのパスを指定してください。
+
 ---
 
 ## 開発
@@ -139,6 +147,27 @@ make run       # 起動
 ```
 
 Python から直接起動する場合は `python -m src.main` を使用します。
+
+### マイク入力のデバッグ
+
+録音結果は Whisper に渡す直前に `debug/last_recording.wav` へ保存されます。
+この WAV が無音の場合、まず macOS の `システム設定 > プライバシーとセキュリティ > マイク` で、
+VoicePaste を起動しているアプリ（Terminal / iTerm / PyCharm / Codex など）にマイク権限があるか確認してください。
+
+短いマイク診断は次で実行できます。
+
+```bash
+make mic-test
+```
+
+診断音声は `debug/mic_check.wav` に保存されます。
+
+入力デバイスを固定したい場合は、`make mic-test` に表示される番号を `config.yaml` の
+`input_device` に指定します。
+
+```yaml
+input_device: 1  # 例: MacBook Proのマイク
+```
 
 コントリビュートの前に `AGENTS.md` と `CONTRIBUTING.md` を読んでください。
 

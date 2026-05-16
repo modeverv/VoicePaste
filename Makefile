@@ -2,7 +2,7 @@ PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
 OS_NAME := $(shell uname -s 2>/dev/null || echo Windows)
 
-.PHONY: install run test lint format
+.PHONY: install run mic-test test lint format
 
 install:
 ifeq ($(OS_NAME),Darwin)
@@ -16,6 +16,9 @@ endif
 run:
 	$(PYTHON) -m src.main
 
+mic-test:
+	DEVICE="$(DEVICE)" SECONDS="$(SECONDS)" $(PYTHON) -m src.mic_check
+
 test:
 	$(PYTHON) -m pytest tests/ -v --cov=src --cov-report=term-missing --cov-fail-under=80
 
@@ -26,4 +29,3 @@ lint:
 format:
 	$(PYTHON) -m ruff format src/ tests/
 	$(PYTHON) -m ruff check --fix src/ tests/
-

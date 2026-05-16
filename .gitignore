@@ -8,4 +8,7 @@ venv/
 dist/
 build/
 *.egg-info/
+*.wav
+.idea
+
 

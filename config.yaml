@@ -2,7 +2,11 @@ hotkey: "<cmd>+<shift>+space"
 model: "base"
 language: "ja"
 device: "auto"
+input_device: 1
+input_sample_rate: "auto"
+sample_rate: 16000
 chunk_seconds: 3
+debug_audio_path: "debug/last_recording.wav"
 formatter:
   backend: "rule"
   remove_fillers: true
@@ -19,4 +23,3 @@ formatter:
     endpoint: "http://localhost:1234/v1"
     model: "auto"
     prompt: ""
-

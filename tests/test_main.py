@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import queue
+import wave
+from pathlib import Path
 from unittest.mock import Mock
 
 import numpy as np
@@ -29,7 +31,7 @@ class FakeFormatter:
         return text.replace("えっと", "") + "。"
 
 
-def test_app_recording_to_clipboard_flow() -> None:
+def test_app_recording_to_clipboard_flow(tmp_path: Path) -> None:
     recorder_holder: dict[str, FakeRecorder] = {}
 
     def recorder_factory(chunk_queue: queue.Queue[AudioArray | None]) -> FakeRecorder:
@@ -38,8 +40,9 @@ def test_app_recording_to_clipboard_flow() -> None:
         return recorder
 
     clipboard = Mock()
+    debug_path = tmp_path / "last_recording.wav"
     app = VoicePasteApp(
-        Config(),
+        Config(debug_audio_path=str(debug_path)),
         recorder_factory=recorder_factory,
         transcriber=FakeTranscriber(),
         formatter=FakeFormatter(),
@@ -56,6 +59,9 @@ def test_app_recording_to_clipboard_flow() -> None:
     clipboard.assert_called_once_with("これはテストです。")
     assert app.final_text == "これはテストです。"
     assert app.state in {State.DONE, State.IDLE}
+    with wave.open(str(debug_path), "rb") as wav:
+        assert wav.getframerate() == 16000
+        assert wav.getnframes() == 4
 
 
 def test_app_sets_error_when_final_processing_fails() -> None:
@@ -69,9 +75,60 @@ def test_app_sets_error_when_final_processing_fails() -> None:
     assert app.error_text == "boom"
 
 
+def test_app_sets_error_for_silent_audio(tmp_path: Path) -> None:
+    debug_path = tmp_path / "silent.wav"
+    transcriber = FakeTranscriber()
+    app = VoicePasteApp(
+        Config(debug_audio_path=str(debug_path)),
+        transcriber=transcriber,
+        clipboard_writer=Mock(),
+    )
+
+    app._final_worker(np.zeros(4, dtype=np.float32))
+
+    assert app.state == State.ERROR
+    assert "Recorded audio is silent" in app.error_text
+    assert debug_path.exists()
+    transcriber.transcribe.assert_not_called()
+
+
 def test_render_includes_ready_status() -> None:
     app = VoicePasteApp(Config(), transcriber=FakeTranscriber(), clipboard_writer=Mock())
 
     rendered = app.render()
 
     assert "Ready" in str(rendered.renderable.renderables[2])
+
+
+def test_render_final_text_uses_strong_color_after_idle() -> None:
+    app = VoicePasteApp(Config(), transcriber=FakeTranscriber(), clipboard_writer=Mock())
+    app.final_text = "確定テキスト"
+    app.state = State.IDLE
+
+    rendered = app.render()
+
+    assert str(rendered.renderable.renderables[4]) == "確定テキスト"
+    assert rendered.renderable.renderables[4].style == "green"
+
+
+def test_render_includes_loading_status() -> None:
+    app = VoicePasteApp(Config(), transcriber=FakeTranscriber(), clipboard_writer=Mock())
+    app.state = State.LOADING
+
+    rendered = app.render()
+
+    assert "Loading model" in str(rendered.renderable.renderables[2])
+
+
+def test_load_quietly_suppresses_backend_output(capsys: object) -> None:
+    class NoisyTranscriber(FakeTranscriber):
+        def __init__(self) -> None:
+            super().__init__()
+            self.load = Mock(side_effect=lambda: print("download progress"))
+
+    app = VoicePasteApp(Config(), transcriber=NoisyTranscriber(), clipboard_writer=Mock())
+
+    app._load_quietly()
+    captured = capsys.readouterr()
+
+    assert captured.out == ""

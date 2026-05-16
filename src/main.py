@@ -6,7 +6,9 @@ import queue
 import threading
 import time
 from collections.abc import Callable
+from contextlib import redirect_stderr, redirect_stdout
 from enum import Enum, auto
+from io import StringIO
 from typing import Any
 
 from rich.console import Group
@@ -14,6 +16,7 @@ from rich.live import Live
 from rich.panel import Panel
 from rich.text import Text
 
+from src.audio_debug import audio_rms, is_silent, save_wav
 from src.clipboard import copy_to_clipboard
 from src.config import Config, load_config
 from src.formatter import PostFormatter
@@ -25,6 +28,7 @@ from src.transcriber import Transcriber
 class State(Enum):
     """Application state."""
 
+    LOADING = auto()
     IDLE = auto()
     RECORDING = auto()
     PROCESSING = auto()
@@ -121,27 +125,41 @@ class VoicePasteApp:
         elif state == State.ERROR:
             body.append(Text(error, style="red"))
         elif final:
-            style = "dim" if state == State.IDLE else ""
-            body.append(Text(final, style=style))
+            body.append(Text(final, style="green"))
         return Panel(Group(*body), border_style=self._border_style(state))
 
     def run(self) -> None:
         """Run the TUI and global hotkey listener."""
 
-        self.load()
-        listener = self.hotkey_factory(
-            self.config.hotkey,
-            self.start_recording,
-            self.stop_recording,
-        )
-        listener.start()
+        listener: HotkeyListener | None = None
+        with self._lock:
+            self.state = State.LOADING
         try:
             with Live(self.render(), refresh_per_second=8) as live:
+                self._load_quietly()
+                live.console.clear()
+                with self._lock:
+                    self.state = State.IDLE
+                listener = self.hotkey_factory(
+                    self.config.hotkey,
+                    self.start_recording,
+                    self.stop_recording,
+                )
+                listener.start()
                 while True:
                     live.update(self.render())
                     time.sleep(0.125)
         except KeyboardInterrupt:
-            listener.stop()
+            pass
+        finally:
+            if listener is not None:
+                listener.stop()
+
+    def _load_quietly(self) -> None:
+        """Load the model while suppressing backend download/progress output."""
+
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            self.load()
 
     def _chunk_worker(self) -> None:
         while True:
@@ -159,6 +177,15 @@ class VoicePasteApp:
 
     def _final_worker(self, full_audio: AudioArray) -> None:
         try:
+            save_wav(full_audio, self.config.debug_audio_path, self.config.sample_rate)
+            if is_silent(full_audio):
+                raise RuntimeError(
+                    "Recorded audio is silent "
+                    f"(RMS={audio_rms(full_audio):.8f}). "
+                    f"Saved debug WAV: {self.config.debug_audio_path}. "
+                    "Check macOS Microphone permission for the app running VoicePaste "
+                    "and verify the input device."
+                )
             raw_text = self.transcriber.transcribe(full_audio)
             formatted = self.formatter.format(raw_text)
             self.clipboard_writer(formatted)
@@ -179,9 +206,17 @@ class VoicePasteApp:
             self.state = State.ERROR
 
     def _default_recorder_factory(self, chunk_queue: queue.Queue[AudioArray]) -> Recorder:
-        return Recorder(chunk_seconds=self.config.chunk_seconds, chunk_queue=chunk_queue)
+        return Recorder(
+            sample_rate=self.config.sample_rate,
+            input_sample_rate=self.config.input_sample_rate,
+            chunk_seconds=self.config.chunk_seconds,
+            chunk_queue=chunk_queue,
+            device=self.config.input_device,
+        )
 
     def _status_text(self, state: State) -> Text:
+        if state == State.LOADING:
+            return Text("○ Loading model...", style="yellow")
         if state == State.IDLE:
             return Text(f"○ Ready  [{self.config.hotkey}]", style="dim")
         if state == State.RECORDING:
@@ -202,13 +237,17 @@ class VoicePasteApp:
             return "green"
         if state == State.ERROR:
             return "red"
+        if state == State.LOADING:
+            return "yellow"
         return "dim"
 
 
 def main() -> None:
     """Run VoicePaste using config.yaml."""
 
-    app = VoicePasteApp(load_config("config.yaml"))
+    from src.microphone import select_microphone
+
+    app = VoicePasteApp(select_microphone(load_config("config.yaml")))
     app.run()
 
 

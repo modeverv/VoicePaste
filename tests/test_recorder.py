@@ -22,13 +22,20 @@ class FakeInputStream:
 def test_recorder_start_creates_sounddevice_stream(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_stream = FakeInputStream()
     factory = Mock(return_value=fake_stream)
-    monkeypatch.setitem(sys.modules, "sounddevice", SimpleNamespace(InputStream=factory))
+    query_devices = Mock(return_value={"default_samplerate": 48000.0})
+    monkeypatch.setitem(
+        sys.modules,
+        "sounddevice",
+        SimpleNamespace(InputStream=factory, query_devices=query_devices),
+    )
     recorder = Recorder(sample_rate=16000, chunk_seconds=3)
 
     recorder.start()
 
     factory.assert_called_once()
-    assert factory.call_args.kwargs["samplerate"] == 16000
+    query_devices.assert_called_once_with(None, "input")
+    assert factory.call_args.kwargs["samplerate"] == 48000
+    assert factory.call_args.kwargs["device"] is None
     assert factory.call_args.kwargs["channels"] == 1
     assert factory.call_args.kwargs["dtype"] == "float32"
     fake_stream.start.assert_called_once()
@@ -65,3 +72,13 @@ def test_recorder_stop_returns_full_audio_and_flushes_partial_chunk() -> None:
     np.testing.assert_array_equal(full, np.ones(3, dtype=np.float32))
     np.testing.assert_array_equal(chunks.get(), np.ones(3, dtype=np.float32))
     assert recorder.is_recording is False
+
+
+def test_recorder_resamples_capture_audio_to_output_rate() -> None:
+    recorder = Recorder(sample_rate=2, input_sample_rate=4)
+    recorder._capture_sample_rate = 4
+
+    output = recorder._to_output_rate(np.array([0, 1, 0, -1], dtype=np.float32))
+
+    assert output.dtype == np.float32
+    assert output.shape == (2,)
