@@ -1,5 +1,5 @@
 hotkey: "<cmd>+<shift>+space"
-model: "base"
+model: "small"
 language: "ja"
 device: "auto"
 input_device: 1
