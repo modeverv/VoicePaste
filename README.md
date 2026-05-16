@@ -121,6 +121,7 @@ formatter:
     mlx_model: "mlx-community/gemma-4-e2b-it-4bit"
     gguf_repo_id: "mradermacher/gemma-4-E2B-it-GGUF"
     gguf_filename: "*Q4_K_M.gguf"
+    models_dir: "models"
     max_tokens: 256
     temperature: 0.0
     n_ctx: 4096
@@ -138,6 +139,8 @@ macOSではMLX版の `mlx-community/gemma-4-e2b-it-4bit` を使用します。Li
 `llama-cpp-python` からGGUF版の `mradermacher/gemma-4-E2B-it-GGUF` の `Q4_K_M` を使用します。
 初回実行時はHugging Faceからモデルのダウンロードが発生します。完全オフラインで使う場合は
 事前にモデルを取得し、`model` にローカルの `.gguf` ファイルパス、または利用したいモデルIDを指定してください。
+LLMモデルは `models_dir` 配下に保存され、既定ではプロジェクト直下の `models/` に入ります。
+`models/` の中身は `.gitignore` で除外されます。
 
 ### モデルサイズの目安
 

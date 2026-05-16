@@ -16,7 +16,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-cov", "ruff"]
-darwin-arm64 = ["mlx-whisper", "mlx-vlm"]
+darwin-arm64 = ["mlx-whisper", "mlx-vlm", "huggingface-hub"]
 llm-gguf = ["llama-cpp-python", "huggingface-hub"]
 whisper = ["faster-whisper"]
 

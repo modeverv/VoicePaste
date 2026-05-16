@@ -23,6 +23,7 @@ def test_load_config_defaults_when_file_missing(tmp_path: Path) -> None:
     assert config.formatter.llm.mlx_model == "mlx-community/gemma-4-e2b-it-4bit"
     assert config.formatter.llm.gguf_repo_id == "mradermacher/gemma-4-E2B-it-GGUF"
     assert config.formatter.llm.gguf_filename == "*Q4_K_M.gguf"
+    assert config.formatter.llm.models_dir == str(tmp_path / "models")
 
 
 def test_load_config_merges_partial_yaml(tmp_path: Path) -> None:
@@ -43,6 +44,7 @@ formatter:
     model: japanese-editor
     prompt: custom prompt
     gguf_filename: "*Q5_K_M.gguf"
+    models_dir: local-models
     max_tokens: 128
     temperature: 0.1
     n_ctx: 2048
@@ -68,6 +70,7 @@ formatter:
     assert config.formatter.llm.prompt == "custom prompt"
     assert config.formatter.llm.endpoint == "http://localhost:1234/v1"
     assert config.formatter.llm.gguf_filename == "*Q5_K_M.gguf"
+    assert config.formatter.llm.models_dir == str(tmp_path / "local-models")
     assert config.formatter.llm.max_tokens == 128
     assert config.formatter.llm.temperature == 0.1
     assert config.formatter.llm.n_ctx == 2048

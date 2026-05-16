@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import types
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -126,13 +127,12 @@ def test_llm_formatter_rejects_unstructured_output() -> None:
         formatter.format("えっとこれはテストです")
 
 
-def test_llm_formatter_rejects_extra_json_keys() -> None:
+def test_llm_formatter_accepts_extra_json_keys() -> None:
     runner = FakeRunner('{"formatted_text": "これはテストです。", "notes": "removed filler"}')
     formatter = LLMFormatter(FormatterConfig(backend="llm"))
     formatter._runner = runner
 
-    with pytest.raises(RuntimeError, match="only formatted_text"):
-        formatter.format("えっとこれはテストです")
+    assert formatter.format("えっとこれはテストです") == "これはテストです。"
 
 
 def test_llm_formatter_empty_input_skips_runner() -> None:
@@ -169,11 +169,12 @@ def test_llm_formatter_auto_backend_uses_gguf_elsewhere(monkeypatch: pytest.Monk
     assert formatter._create_runner().__class__.__name__ == "_GgufGemmaRunner"
 
 
-def test_mlx_runner_loads_configured_model(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_mlx_runner_loads_configured_model(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     calls: dict[str, Any] = {}
     fake_model = types.SimpleNamespace(config=types.SimpleNamespace())
     fake_mlx_vlm = types.ModuleType("mlx_vlm")
     fake_prompt_utils = types.ModuleType("mlx_vlm.prompt_utils")
+    fake_huggingface_hub = types.ModuleType("huggingface_hub")
 
     def fake_load(model_name: str) -> tuple[Any, Any]:
         calls["model_name"] = model_name
@@ -187,25 +188,38 @@ def test_mlx_runner_loads_configured_model(monkeypatch: pytest.MonkeyPatch) -> N
         calls["template_args"] = args
         return "templated prompt"
 
+    def fake_snapshot_download(**kwargs: Any) -> str:
+        calls["snapshot_download"] = kwargs
+        return str(kwargs["local_dir"])
+
     fake_mlx_vlm.load = fake_load
     fake_mlx_vlm.generate = fake_generate
     fake_prompt_utils.apply_chat_template = fake_apply_chat_template
+    fake_huggingface_hub.snapshot_download = fake_snapshot_download
     monkeypatch.setitem(sys.modules, "mlx_vlm", fake_mlx_vlm)
     monkeypatch.setitem(sys.modules, "mlx_vlm.prompt_utils", fake_prompt_utils)
+    monkeypatch.setitem(sys.modules, "huggingface_hub", fake_huggingface_hub)
 
     formatter = LLMFormatter(
         FormatterConfig(
             backend="llm",
-            llm=LLMFormatterConfig(backend="mlx", mlx_model="mlx-community/test-model"),
+            llm=LLMFormatterConfig(
+                backend="mlx",
+                mlx_model="mlx-community/test-model",
+                models_dir=str(tmp_path),
+            ),
         )
     )
 
     assert formatter.format("えっとテスト") == "整形済みです。"
-    assert calls["model_name"] == "mlx-community/test-model"
+    assert calls["snapshot_download"]["repo_id"] == "mlx-community/test-model"
+    expected_dir = str(tmp_path / "mlx" / "mlx-community__test-model")
+    assert calls["snapshot_download"]["local_dir"] == expected_dir
+    assert calls["model_name"] == expected_dir
     assert calls["generate_kwargs"]["temperature"] == 0.0
 
 
-def test_gguf_runner_loads_configured_repo(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gguf_runner_loads_configured_repo(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     calls: dict[str, Any] = {}
     fake_llama_cpp = types.ModuleType("llama_cpp")
 
@@ -231,6 +245,7 @@ def test_gguf_runner_loads_configured_repo(monkeypatch: pytest.MonkeyPatch) -> N
                 backend="gguf",
                 gguf_repo_id="example/gemma-gguf",
                 gguf_filename="*Q4_K_M.gguf",
+                models_dir=str(tmp_path),
             ),
         )
     )
@@ -238,5 +253,25 @@ def test_gguf_runner_loads_configured_repo(monkeypatch: pytest.MonkeyPatch) -> N
     assert formatter.format("えっとこれはテストです") == "これはテストです。"
     assert calls["from_pretrained"]["repo_id"] == "example/gemma-gguf"
     assert calls["from_pretrained"]["filename"] == "*Q4_K_M.gguf"
+    assert calls["from_pretrained"]["local_dir"] == str(tmp_path / "gguf" / "example__gemma-gguf")
+    assert calls["from_pretrained"]["local_dir_use_symlinks"] is False
     assert calls["chat"]["temperature"] == 0.0
     assert calls["chat"]["response_format"]["schema"]["required"] == ["formatted_text"]
+
+
+def test_llm_formatter_load_preloads_runner() -> None:
+    class LoadableRunner(FakeRunner):
+        def __init__(self) -> None:
+            super().__init__('{"formatted_text": "unused"}')
+            self.load_called = False
+
+        def load(self) -> None:
+            self.load_called = True
+
+    runner = LoadableRunner()
+    formatter = LLMFormatter(FormatterConfig(backend="llm"))
+    formatter._runner = runner
+
+    formatter.load()
+
+    assert runner.load_called is True

@@ -6,7 +6,7 @@ import queue
 import threading
 import time
 from collections.abc import Callable
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import redirect_stdout
 from enum import Enum, auto
 from io import StringIO
 from typing import Any
@@ -68,9 +68,12 @@ class VoicePasteApp:
         self._lock = threading.Lock()
 
     def load(self) -> None:
-        """Load the transcription model."""
+        """Load models before the interactive UI starts."""
 
         self.transcriber.load()
+        formatter_load = getattr(self.formatter, "load", None)
+        if callable(formatter_load):
+            formatter_load()
 
     def start_recording(self) -> None:
         """Start a push-to-talk recording session."""
@@ -135,9 +138,8 @@ class VoicePasteApp:
         with self._lock:
             self.state = State.LOADING
         try:
+            self._load_with_progress()
             with Live(self.render(), refresh_per_second=8) as live:
-                self._load_quietly()
-                live.console.clear()
                 with self._lock:
                     self.state = State.IDLE
                 listener = self.hotkey_factory(
@@ -155,10 +157,13 @@ class VoicePasteApp:
             if listener is not None:
                 listener.stop()
 
-    def _load_quietly(self) -> None:
-        """Load the model while suppressing backend download/progress output."""
+    def _load_with_progress(self) -> None:
+        """Load models; download progress is shown, noisy-but-harmless init logs are suppressed."""
 
-        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+        from rich.console import Console
+
+        Console().print("[yellow]○ Loading model...[/yellow]")
+        with redirect_stdout(StringIO()):
             self.load()
 
     def _chunk_worker(self) -> None:

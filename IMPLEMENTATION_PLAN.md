@@ -133,6 +133,7 @@ class LLMFormatter(PostFormatter):
 macOSでは `mlx-vlm` と `mlx-community/gemma-4-e2b-it-4bit` を使用する。
 Linux / Windowsでは `llama-cpp-python` と `mradermacher/gemma-4-E2B-it-GGUF` の
 `Q4_K_M` を使用する。外部依存はテストで必ずモックする。
+LLMモデルは `models_dir` 配下に保存し、メインUI表示前にロードする。
 システムプロンプトは `formatter.llm.prompt` に直接記述する。
 LLM応答は `formatted_text` のみを持つJSONオブジェクトに限定し、自由文応答は受け入れない。
 

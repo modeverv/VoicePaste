@@ -146,6 +146,7 @@ formatter:
     mlx_model: "mlx-community/gemma-4-e2b-it-4bit"
     gguf_repo_id: "mradermacher/gemma-4-E2B-it-GGUF"
     gguf_filename: "*Q4_K_M.gguf"
+    models_dir: "models"
     max_tokens: 256
     temperature: 0.0
     n_ctx: 4096
@@ -277,7 +278,8 @@ class LLMFormatter(PostFormatter):
 
 - macOSは `mlx-vlm` と `mlx-community/gemma-4-e2b-it-4bit` を使用する
 - Linux / Windowsは `llama-cpp-python` と `mradermacher/gemma-4-E2B-it-GGUF` の `Q4_K_M` を使用する
-- 初回実行時はHugging Faceからモデルを取得し、以後はローカルキャッシュを使用する
+- 初回実行時はHugging Faceからモデルを取得し、以後は `models_dir` 配下を使用する
+- LLM backendはメインUI表示前の起動ロード時にモデル取得とロードを完了する
 - 録音中のチャンク暫定表示には適用せず、確定Whisper結果だけを整形する
 - システムプロンプトは `formatter.llm.prompt` に直接記述する
 - LLM応答は `{"formatted_text": "..."}` のJSONオブジェクトに限定し、余分なキーや自由文は失敗として扱う

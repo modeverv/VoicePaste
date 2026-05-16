@@ -29,6 +29,7 @@ formatter:
     mlx_model: "mlx-community/gemma-4-e2b-it-4bit"
     gguf_repo_id: "mradermacher/gemma-4-E2B-it-GGUF"
     gguf_filename: "*Q4_K_M.gguf"
+    models_dir: "models"
     max_tokens: 256
     temperature: 0.0
     n_ctx: 4096

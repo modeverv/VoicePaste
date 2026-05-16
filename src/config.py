@@ -29,6 +29,7 @@ class LLMFormatterConfig:
     mlx_model: str = "mlx-community/gemma-4-e2b-it-4bit"
     gguf_repo_id: str = "mradermacher/gemma-4-E2B-it-GGUF"
     gguf_filename: str = "*Q4_K_M.gguf"
+    models_dir: str = "models"
     max_tokens: int = 256
     temperature: float = 0.0
     n_ctx: int = 4096
@@ -110,6 +111,13 @@ def load_config(path: str | Path = "config.yaml") -> Config:
     formatter_raw = _as_mapping(raw.get("formatter"))
     llm_raw = _as_mapping(formatter_raw.get("llm"))
 
+    _models_dir_raw = Path(str(llm_raw.get("models_dir", defaults.formatter.llm.models_dir)))
+    _models_dir = (
+        _models_dir_raw
+        if _models_dir_raw.is_absolute()
+        else config_path.parent.resolve() / _models_dir_raw
+    )
+
     llm = LLMFormatterConfig(
         endpoint=str(llm_raw.get("endpoint", defaults.formatter.llm.endpoint)),
         model=str(llm_raw.get("model", defaults.formatter.llm.model)),
@@ -118,6 +126,7 @@ def load_config(path: str | Path = "config.yaml") -> Config:
         mlx_model=str(llm_raw.get("mlx_model", defaults.formatter.llm.mlx_model)),
         gguf_repo_id=str(llm_raw.get("gguf_repo_id", defaults.formatter.llm.gguf_repo_id)),
         gguf_filename=str(llm_raw.get("gguf_filename", defaults.formatter.llm.gguf_filename)),
+        models_dir=str(_models_dir),
         max_tokens=int(llm_raw.get("max_tokens", defaults.formatter.llm.max_tokens)),
         temperature=float(llm_raw.get("temperature", defaults.formatter.llm.temperature)),
         n_ctx=int(llm_raw.get("n_ctx", defaults.formatter.llm.n_ctx)),

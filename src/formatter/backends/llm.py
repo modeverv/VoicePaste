@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import platform
 import re
+from pathlib import Path
 from typing import Any, Protocol
 
 from src.config import FormatterConfig
@@ -24,6 +25,9 @@ STRUCTURED_OUTPUT_SCHEMA: dict[str, Any] = {
 
 
 class _LLMRunner(Protocol):
+    def load(self) -> None:
+        """Download and load the local LLM."""
+
     def generate(self, system_prompt: str, user_prompt: str) -> str:
         """Generate a structured JSON string from prompts."""
 
@@ -37,6 +41,11 @@ class LLMFormatter(PostFormatter):
         self.config = config
         self.llm_config = config.llm
         self._runner: _LLMRunner | None = None
+
+    def load(self) -> None:
+        """Download and load the local LLM backend."""
+
+        self._get_runner().load()
 
     def format(self, text: str) -> str:
         """Format raw Whisper text using a local LLM."""
@@ -86,18 +95,36 @@ class LLMFormatter(PostFormatter):
         cleaned = output.strip()
         cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL).strip()
         cleaned = self._strip_json_fence(cleaned)
-        try:
-            payload = json.loads(cleaned)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError("LLM formatter returned invalid structured JSON.") from exc
-        if not isinstance(payload, dict):
-            raise RuntimeError("LLM formatter JSON must be an object.")
-        if set(payload) != {"formatted_text"}:
-            raise RuntimeError("LLM formatter JSON must contain only formatted_text.")
+
+        payload = self._extract_json_object(cleaned)
+        if payload is None:
+            raise RuntimeError(
+                f"LLM formatter returned invalid structured JSON.\nRaw output: {output!r}"
+            )
+        if not isinstance(payload, dict) or "formatted_text" not in payload:
+            raise RuntimeError(
+                f"LLM formatter JSON missing 'formatted_text'.\nRaw output: {output!r}"
+            )
         formatted = payload["formatted_text"]
         if not isinstance(formatted, str):
             raise RuntimeError("LLM formatter formatted_text must be a string.")
         return formatted.strip()
+
+    @staticmethod
+    def _extract_json_object(text: str) -> dict | None:
+        """Try to parse JSON, falling back to extracting the first {...} block."""
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end > start:
+            try:
+                return json.loads(text[start : end + 1])
+            except json.JSONDecodeError:
+                pass
+        return None
 
     @staticmethod
     def _strip_json_fence(text: str) -> str:
@@ -111,18 +138,51 @@ class LLMFormatter(PostFormatter):
 
 
 class _MlxGemmaRunner:
-    """Gemma 4 E2B runner backed by mlx-vlm on macOS."""
+    """Gemma 4 E2B runner backed by mlx-vlm on macOS.
+
+    All MLX calls are dispatched to a single dedicated thread so that the GPU
+    stream initialised during load() is reused for every generate() call,
+    regardless of which application thread invokes generate().
+    """
 
     def __init__(self, config: Any) -> None:
+        import concurrent.futures
+
         self.config = config
         self._model: Any | None = None
         self._processor: Any | None = None
         self._model_config: Any | None = None
+        self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
+    def load(self) -> None:
+        """Download and load the MLX model on the dedicated MLX thread."""
+
+        self._executor.submit(self._load_sync).result()
 
     def generate(self, system_prompt: str, user_prompt: str) -> str:
-        """Generate text with mlx-vlm."""
+        """Generate text on the dedicated MLX thread."""
 
-        model, processor, model_config = self._load()
+        return self._executor.submit(self._generate_sync, system_prompt, user_prompt).result()
+
+    def _load_sync(self) -> None:
+        if self._model is not None and self._processor is not None:
+            return
+        try:
+            from mlx_vlm import load
+        except ImportError as exc:  # pragma: no cover - covered by dependency absence only
+            raise RuntimeError(
+                "LLM formatter backend 'mlx' requires mlx-vlm. Install requirements-darwin.txt."
+            ) from exc
+
+        model_name = self.config.model
+        if model_name == "auto":
+            model_name = self.config.mlx_model
+        local_model_dir = _resolve_hf_model_dir(model_name, "mlx", self.config)
+        self._model, self._processor = load(local_model_dir)
+        self._model_config = self._model.config
+
+    def _generate_sync(self, system_prompt: str, user_prompt: str) -> str:
+        self._load_sync()
         try:
             from mlx_vlm import generate
             from mlx_vlm.prompt_utils import apply_chat_template
@@ -131,33 +191,20 @@ class _MlxGemmaRunner:
                 "LLM formatter backend 'mlx' requires mlx-vlm. Install requirements-darwin.txt."
             ) from exc
 
-        prompt = f"{system_prompt}\n\n{user_prompt}"
-        formatted_prompt = apply_chat_template(processor, model_config, prompt)
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        formatted_prompt = apply_chat_template(self._processor, self._model_config, messages)
         result = generate(
-            model,
-            processor,
+            self._model,
+            self._processor,
             formatted_prompt,
             max_tokens=self.config.max_tokens,
             temperature=self.config.temperature,
             verbose=False,
         )
-        return str(result)
-
-    def _load(self) -> tuple[Any, Any, Any]:
-        if self._model is None or self._processor is None:
-            try:
-                from mlx_vlm import load
-            except ImportError as exc:  # pragma: no cover - covered by dependency absence only
-                raise RuntimeError(
-                    "LLM formatter backend 'mlx' requires mlx-vlm. Install requirements-darwin.txt."
-                ) from exc
-
-            model_name = self.config.model
-            if model_name == "auto":
-                model_name = self.config.mlx_model
-            self._model, self._processor = load(model_name)
-            self._model_config = self._model.config
-        return self._model, self._processor, self._model_config
+        return result.text if hasattr(result, "text") else str(result)
 
 
 class _GgufGemmaRunner:
@@ -166,6 +213,11 @@ class _GgufGemmaRunner:
     def __init__(self, config: Any) -> None:
         self.config = config
         self._llm: Any | None = None
+
+    def load(self) -> None:
+        """Download and load the GGUF model."""
+
+        self._load()
 
     def generate(self, system_prompt: str, user_prompt: str) -> str:
         """Generate text with llama-cpp-python."""
@@ -203,11 +255,41 @@ class _GgufGemmaRunner:
                     verbose=False,
                 )
             else:
+                repo_id = self.config.gguf_repo_id if model == "auto" else model
                 self._llm = Llama.from_pretrained(
-                    repo_id=self.config.gguf_repo_id if model == "auto" else model,
+                    repo_id=repo_id,
                     filename=self.config.gguf_filename,
+                    local_dir=str(_model_dir(repo_id, "gguf", self.config)),
+                    local_dir_use_symlinks=False,
                     n_ctx=self.config.n_ctx,
                     n_gpu_layers=self.config.n_gpu_layers,
                     verbose=False,
                 )
         return self._llm
+
+
+def _resolve_hf_model_dir(model_id: str, backend: str, config: Any) -> str:
+    path = Path(model_id).expanduser()
+    if path.exists():
+        return str(path)
+    local_dir = _model_dir(model_id, backend, config)
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError as exc:  # pragma: no cover - covered by dependency absence only
+        raise RuntimeError(
+            "LLM formatter model download requires huggingface-hub. "
+            "Install the platform requirements file."
+        ) from exc
+    snapshot_download(
+        repo_id=model_id,
+        local_dir=str(local_dir),
+        local_dir_use_symlinks=False,
+    )
+    return str(local_dir)
+
+
+def _model_dir(model_id: str, backend: str, config: Any) -> Path:
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "__", model_id.strip("/"))
+    path = Path(config.models_dir) / backend / safe_name
+    path.mkdir(parents=True, exist_ok=True)
+    return path

@@ -10,5 +10,6 @@ build/
 *.egg-info/
 *.wav
 .idea
-
-
+models/*
+!models/.gitignore
+.claude

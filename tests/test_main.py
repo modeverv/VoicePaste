@@ -27,6 +27,9 @@ class FakeTranscriber:
 
 
 class FakeFormatter:
+    def __init__(self) -> None:
+        self.load = Mock()
+
     def format(self, text: str) -> str:
         return text.replace("えっと", "") + "。"
 
@@ -132,3 +135,19 @@ def test_load_quietly_suppresses_backend_output(capsys: object) -> None:
     captured = capsys.readouterr()
 
     assert captured.out == ""
+
+
+def test_load_preloads_transcriber_and_formatter() -> None:
+    transcriber = FakeTranscriber()
+    formatter = FakeFormatter()
+    app = VoicePasteApp(
+        Config(),
+        transcriber=transcriber,
+        formatter=formatter,
+        clipboard_writer=Mock(),
+    )
+
+    app.load()
+
+    transcriber.load.assert_called_once()
+    formatter.load.assert_called_once()
