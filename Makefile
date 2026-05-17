@@ -2,7 +2,7 @@ PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
 OS_NAME := $(shell uname -s 2>/dev/null || echo Windows)
 
-.PHONY: install run mic-test test lint format
+.PHONY: install run run-gui mic-test test lint format
 
 install:
 ifeq ($(OS_NAME),Darwin)
@@ -16,6 +16,9 @@ endif
 
 run:
 	$(PYTHON) -m src.main
+
+run-gui:
+	$(PYTHON) -m src.gui
 
 mic-test:
 	DEVICE="$(DEVICE)" SECONDS="$(SECONDS)" $(PYTHON) -m src.mic_check

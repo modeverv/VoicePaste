@@ -11,7 +11,7 @@ AquaVoice要らず。サブスク不要。データはあなたのマシンか�
 - **クロスプラットフォーム** : macOS / Linux / Windows 対応
 - **Push-to-Talk** : ホットキーを押している間だけ録音する
 - **高速** : macOS Apple Silicon では mlx-whisper、その他は faster-whisper を使用
-- **TUI** : ターミナルにリアルタイムで状態を表示する
+- **TUI / GUI** : ターミナル、または常時最前面の小さなウィンドウにリアルタイムで状態を表示する
 - **シンプル** : クリップボードに入れるだけ。ペーストのタイミングは自分で決める
 - **LLM整形** : 確定Whisper結果をローカルGemma 4 E2Bで自然な文章へ整形できる
 
@@ -71,11 +71,29 @@ sudo pacman -S xclip
 make run
 ```
 
+常時最前面のGUIで起動する場合:
+
+```bash
+make run-gui
+```
+
 ### Windows
 
 ```bat
 start.bat
 ```
+
+常時最前面のGUIで起動する場合:
+
+```bat
+python -m src.gui
+```
+
+GUIはPython標準ライブラリのTkinterを使うため、追加のGUI依存はありません。
+macOS / Windows / Linuxで同じ入口を使い、TUIと同じ Ready / RECORDING /
+PROCESSING / Done / Error の状態と、暫定テキスト・確定テキストを表示します。
+macOSではTkとMLXのネイティブクラッシュを避けるため、モデルロード完了後にGUIを開きます。
+ロード中の進捗は先にターミナルへ表示します。
 
 ---
 
@@ -173,9 +191,10 @@ make install   # 依存関係のインストール
 make test      # テストの実行
 make lint      # リントの実行
 make run       # 起動
+make run-gui   # 常時最前面GUIで起動
 ```
 
-Python から直接起動する場合は `python -m src.main` を使用します。
+Python から直接起動する場合は `python -m src.main` または `python -m src.gui` を使用します。
 
 ### マイク入力のデバッグ
 

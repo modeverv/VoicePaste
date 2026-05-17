@@ -28,6 +28,7 @@ VoicePaste は、音声入力をローカルWhisperで文字起こしし、ク�
 | F-04 | クリップボード出力 | 整形済みテキストをOSのクリップボードに書き込む |
 | F-05 | TUI表示 | 現在の状態をターミナルにリアルタイム表示する |
 | F-06 | グローバルホットキー | アプリのフォーカスに依存しないホットキーで録音開始・停止する |
+| F-07 | GUI表示 | TUIと同じ状態・暫定テキスト・確定テキストを常時最前面ウィンドウに表示する |
 
 ### 非機能要件
 
@@ -55,7 +56,8 @@ VoicePaste は、音声入力をローカルWhisperで文字起こしし、ク�
 
 ```
 src/
-├── main.py               # エントリーポイント、TUIループ・状態管理
+├── main.py               # TUIエントリーポイント、状態管理
+├── gui.py                # GUIエントリーポイント、常時最前面ウィンドウ
 ├── recorder.py           # sounddeviceによる録音・デュアルバッファ管理
 ├── transcriber.py        # Whisperバックエンド抽象化
 │   └── backends/
@@ -208,6 +210,39 @@ Richライブラリを使用する。フローティングウィンドウでは�
 | PROCESSING | ⚙ | 黄 | 最後のチャンク暫定テキスト（dim・italic） |
 | DONE | ✓ | 緑 | 確定テキスト（通常） |
 | ERROR | ✗ | 赤 | エラーメッセージ |
+
+---
+
+## GUI仕様
+
+Tkinterを使用する。TUIと同じ `VoicePasteApp` の状態を表示し、録音・文字起こし・整形・
+クリップボード出力の処理はTUIと共有する。
+
+### 起動
+
+```bash
+python -m src.gui
+# または
+make run-gui
+```
+
+### ウィンドウ要件
+
+- macOS / Windows / Linux で動作する
+- 追加pip依存を増やさない
+- `attributes("-topmost", True)` により常時最前面に表示する
+- macOS の MLX/Metal と Tk の衝突を避けるため、モデルロード完了後にGUIウィンドウを開く
+- ロード完了後にグローバルホットキーを開始する
+
+### 表示仕様
+
+| 状態 | 表示 | テキスト表示 |
+|------|------|-------------|
+| IDLE | ○ Ready [hotkey] | 前回確定テキスト（dim） |
+| RECORDING | ● RECORDING... | チャンク暫定テキスト（dim・italic） |
+| PROCESSING | ⚙ PROCESSING... | 最後のチャンク暫定テキスト（dim・italic） |
+| DONE | ✓ Copied to clipboard | 確定テキスト（通常） |
+| ERROR | ✗ ERROR | エラーメッセージ |
 
 ---
 

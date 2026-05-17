@@ -13,7 +13,7 @@ No subscription. No cloud. Your data never leaves your machine.
 - **Cross-platform** — macOS / Linux / Windows
 - **Push-to-Talk** — records only while the hotkey is held
 - **Fast** — uses mlx-whisper on Apple Silicon, faster-whisper everywhere else
-- **TUI** — real-time status display in the terminal
+- **TUI or GUI** — real-time status display in the terminal or a floating window
 - **Simple** — copies to clipboard; you decide when to paste
 - **LLM polish** — optionally refines the final Whisper output with a local Gemma 4 E2B model
 
@@ -73,11 +73,29 @@ sudo pacman -S xclip
 make run
 ```
 
+To use the always-on-top GUI:
+
+```bash
+make run-gui
+```
+
 ### Windows
 
 ```bat
 start.bat
 ```
+
+To use the always-on-top GUI:
+
+```bat
+python -m src.gui
+```
+
+The GUI uses Python's standard Tkinter toolkit, so VoicePaste does not need an
+extra GUI dependency. The window is kept above other windows on macOS, Windows,
+and Linux while it shows the same Ready / RECORDING / PROCESSING / Done / Error
+states as the TUI. On macOS, the GUI window opens after model loading to avoid a
+native Tk / MLX runtime crash; loading progress is printed in the terminal first.
 
 ---
 
@@ -172,9 +190,10 @@ make install   # install dependencies (+ LLM model if configured)
 make test      # run tests
 make lint      # run linter
 make run       # start the app
+make run-gui   # start the floating GUI
 ```
 
-To launch directly: `python -m src.main`
+To launch directly: `python -m src.main` or `python -m src.gui`.
 
 ### Debugging microphone input
 

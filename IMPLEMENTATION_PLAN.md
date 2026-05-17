@@ -346,6 +346,40 @@ strategy:
 
 ---
 
+## GUI 拡張 : 常時最前面ステータスウィンドウ
+
+**目標** : 既存TUIと同じ状態表示を、macOS / Windows / Linux で動く常時最前面GUIでも提供する
+
+### ライブラリ選定
+
+Python標準ライブラリの `tkinter` を使用する。
+
+- 追加pip依存が不要
+- macOS / Windows / Linux で同一APIを使える
+- `attributes("-topmost", True)` で各OSの最前面表示に対応できる
+- 表示要件がステータス・暫定テキスト・確定テキスト中心で、重いGUIフレームワークを必要としない
+
+### タスク
+
+- [x] `src/gui.py` を追加する
+- [x] `VoicePasteApp` の録音・文字起こし・整形・クリップボード処理を再利用する
+- [x] LOADING / IDLE / RECORDING / PROCESSING / DONE / ERROR をGUIに表示する
+- [x] 録音中・処理中は暫定テキスト、完了後は確定テキストを表示する
+- [x] GUIウィンドウを常時最前面にする
+- [x] macOS の MLX/Metal と Tk の衝突を避けるため、モデルロード後にGUIを初期化する
+- [x] `python -m src.gui` と `make run-gui` の入口を追加する
+- [x] `tests/test_gui.py` を追加する（Tk実ウィンドウは起動せずモックする）
+
+### 完了条件
+
+```bash
+make test
+make lint
+python -m src.gui
+```
+
+---
+
 ## 依存ライブラリ一覧
 
 ### 共通

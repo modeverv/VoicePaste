@@ -22,6 +22,7 @@ whisper = ["faster-whisper"]
 
 [project.scripts]
 voicepaste = "src.main:main"
+voicepaste-gui = "src.gui:main"
 
 [tool.ruff]
 line-length = 100
