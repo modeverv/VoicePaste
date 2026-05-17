@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import sys
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -77,13 +78,15 @@ def test_mlx_backend_transcribes_text(monkeypatch: pytest.MonkeyPatch) -> None:
 
     transcribe = Mock(return_value={"text": " テスト "})
     model_holder = SimpleNamespace(get_model=Mock())
+    mlx_core = SimpleNamespace(float16="float16")
     monkeypatch.setitem(sys.modules, "mlx_whisper", SimpleNamespace(transcribe=transcribe))
     monkeypatch.setitem(
         sys.modules,
         "mlx_whisper.transcribe",
         SimpleNamespace(ModelHolder=model_holder),
     )
-    monkeypatch.setitem(sys.modules, "mlx.core", SimpleNamespace(float16="float16"))
+    monkeypatch.setitem(sys.modules, "mlx", SimpleNamespace(core=mlx_core))
+    monkeypatch.setitem(sys.modules, "mlx.core", mlx_core)
     backend = MLXWhisperBackend("base", "auto", "ja")
 
     backend.load()
@@ -99,3 +102,26 @@ def test_mlx_backend_preserves_custom_model_path() -> None:
 
     assert resolve_mlx_model_name("/models/whisper-base-mlx") == "/models/whisper-base-mlx"
     assert resolve_mlx_model_name("org/custom-model") == "org/custom-model"
+
+
+def test_mlx_backend_load_reports_import_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.backends.mlx import MLXWhisperBackend
+
+    real_import = builtins.__import__
+
+    def block_mlx_import(
+        name: str,
+        globals: dict[str, object] | None = None,
+        locals: dict[str, object] | None = None,
+        fromlist: tuple[str, ...] = (),
+        level: int = 0,
+    ) -> object:
+        if name == "mlx" or name.startswith("mlx."):
+            raise ModuleNotFoundError("No module named 'mlx'")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", block_mlx_import)
+    backend = MLXWhisperBackend("base", "auto", "ja")
+
+    with pytest.raises(ModuleNotFoundError):
+        backend.load()

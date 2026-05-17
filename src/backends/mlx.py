@@ -62,13 +62,13 @@ class MLXWhisperBackend:
         self._loaded = True
 
     def _worker_loop(self) -> None:
-        import mlx.core as mx
-        from mlx_whisper import transcribe
-        from mlx_whisper.transcribe import ModelHolder
-
         while True:
             command, audio, response = self._requests.get()
             try:
+                import mlx.core as mx
+                from mlx_whisper import transcribe
+                from mlx_whisper.transcribe import ModelHolder
+
                 if command == "load":
                     ModelHolder.get_model(self.model_name, mx.float16)
                     response.put(None)
