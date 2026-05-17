@@ -282,12 +282,22 @@ def test_download_llm_model_uses_quiet_status_progress_by_default(
 ) -> None:
     calls: dict[str, Any] = {}
     fake_huggingface_hub = types.ModuleType("huggingface_hub")
+    fake_tqdm = types.ModuleType("tqdm")
+
+    class FakeTqdm:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            self.desc = kwargs.get("desc")
+
+        def set_description(self, desc: Any = None, *args: Any, **kwargs: Any) -> None:
+            self.desc = desc
 
     def fake_snapshot_download(**kwargs: Any) -> None:
         calls["snapshot_download"] = kwargs
 
     fake_huggingface_hub.snapshot_download = fake_snapshot_download
+    fake_tqdm.tqdm = FakeTqdm
     monkeypatch.setitem(sys.modules, "huggingface_hub", fake_huggingface_hub)
+    monkeypatch.setitem(sys.modules, "tqdm", fake_tqdm)
 
     download_llm_model(
         LLMFormatterConfig(
