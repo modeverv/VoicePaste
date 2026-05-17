@@ -5,6 +5,7 @@ from unittest.mock import Mock
 from src.config import Config
 from src.gui import GuiViewModel, VoicePasteGui
 from src.main import State, VoicePasteApp
+from src.mic_level import MicLevel
 
 
 class FakeTranscriber:
@@ -88,6 +89,37 @@ class FakeLevelMonitor:
         self.is_running = False
 
 
+class FakeCanvas:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple[object, ...], dict[str, object]]] = []
+
+    def winfo_width(self) -> int:
+        return 100
+
+    def winfo_height(self) -> int:
+        return 20
+
+    def delete(self, *args: object) -> None:
+        self.calls.append(("delete", args, {}))
+
+    def create_rectangle(self, *args: object, **kwargs: object) -> None:
+        self.calls.append(("create_rectangle", args, kwargs))
+
+    def create_line(self, *args: object, **kwargs: object) -> None:
+        self.calls.append(("create_line", args, kwargs))
+
+    def create_text(self, *args: object, **kwargs: object) -> None:
+        self.calls.append(("create_text", args, kwargs))
+
+
+class FakeLabel:
+    def __init__(self) -> None:
+        self.kwargs: dict[str, object] = {}
+
+    def configure(self, **kwargs: object) -> None:
+        self.kwargs.update(kwargs)
+
+
 def test_gui_configures_always_on_top_window() -> None:
     root = FakeRoot()
     gui = VoicePasteGui(make_app(), root=root)
@@ -127,3 +159,23 @@ def test_gui_hotkey_callbacks_pause_idle_level_monitor() -> None:
     app.start_recording.assert_called_once()
     app.stop_recording.assert_called_once()
     monitor.start.assert_called_once()
+
+
+def test_gui_renders_bar_style_level_meter() -> None:
+    gui = VoicePasteGui(make_app(), root=FakeRoot())
+    canvas = FakeCanvas()
+    value_label = FakeLabel()
+    gui._level_canvas = canvas
+    gui._level_value_label = value_label
+
+    gui._render_level_meter(MicLevel(rms=0.01, peak=0.1))
+
+    assert ("delete", ("all",), {}) in canvas.calls
+    rectangles = [call for call in canvas.calls if call[0] == "create_rectangle"]
+    lines = [call for call in canvas.calls if call[0] == "create_line"]
+    texts = [call for call in canvas.calls if call[0] == "create_text"]
+    assert rectangles[-1][1] == (0, 2, 33, 18)
+    assert lines[-1][1] == (66, 0, 66, 20)
+    assert texts[-1][1] == (82, 10.0)
+    assert texts[-1][2]["anchor"] == "w"
+    assert value_label.kwargs["text"] == "RMS -40.0  Peak -20.0 dBFS"

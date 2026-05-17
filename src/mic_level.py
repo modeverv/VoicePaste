@@ -11,6 +11,8 @@ from typing import Any
 import numpy as np
 
 InputDevice = int | str | None
+METER_MIN_DBFS = -60.0
+METER_MAX_DBFS = 0.0
 
 
 @dataclass(frozen=True)
@@ -57,6 +59,19 @@ def format_mic_level(level: MicLevel) -> str:
     """Format a microphone level for compact UI display."""
 
     return f"RMS {level.rms_dbfs:6.1f} dBFS  Peak {level.peak_dbfs:6.1f} dBFS"
+
+
+def dbfs_to_meter_fraction(
+    dbfs: float,
+    minimum: float = METER_MIN_DBFS,
+    maximum: float = METER_MAX_DBFS,
+) -> float:
+    """Map a dBFS value to a 0.0-1.0 meter position."""
+
+    if maximum <= minimum:
+        raise ValueError("maximum must be greater than minimum")
+    clamped = min(maximum, max(minimum, dbfs))
+    return (clamped - minimum) / (maximum - minimum)
 
 
 class MicLevelMonitor:

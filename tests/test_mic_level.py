@@ -7,7 +7,13 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 
-from src.mic_level import MicLevel, MicLevelMonitor, format_mic_level, measure_level
+from src.mic_level import (
+    MicLevel,
+    MicLevelMonitor,
+    dbfs_to_meter_fraction,
+    format_mic_level,
+    measure_level,
+)
 
 
 class FakeInputStream:
@@ -30,6 +36,19 @@ def test_format_mic_level_uses_dbfs() -> None:
     text = format_mic_level(MicLevel(rms=0.01, peak=0.1))
 
     assert text == "RMS  -40.0 dBFS  Peak  -20.0 dBFS"
+
+
+def test_dbfs_to_meter_fraction_clamps_meter_range() -> None:
+    assert dbfs_to_meter_fraction(-60.0) == pytest.approx(0.0)
+    assert dbfs_to_meter_fraction(-30.0) == pytest.approx(0.5)
+    assert dbfs_to_meter_fraction(0.0) == pytest.approx(1.0)
+    assert dbfs_to_meter_fraction(-90.0) == pytest.approx(0.0)
+    assert dbfs_to_meter_fraction(6.0) == pytest.approx(1.0)
+
+
+def test_dbfs_to_meter_fraction_rejects_invalid_range() -> None:
+    with pytest.raises(ValueError, match="maximum"):
+        dbfs_to_meter_fraction(-12.0, minimum=0.0, maximum=0.0)
 
 
 def test_monitor_starts_sounddevice_stream(monkeypatch: pytest.MonkeyPatch) -> None:

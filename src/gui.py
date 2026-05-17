@@ -10,7 +10,7 @@ from typing import Any
 from src.config import load_config
 from src.hotkey import HotkeyListener
 from src.main import State, VoicePasteApp
-from src.mic_level import MicLevelMonitor, format_mic_level
+from src.mic_level import METER_MIN_DBFS, MicLevel, MicLevelMonitor, dbfs_to_meter_fraction
 
 
 @dataclass(frozen=True)
@@ -71,7 +71,8 @@ class VoicePasteGui:
         self._closed = False
         self._status_label: Any | None = None
         self._body_label: Any | None = None
-        self._level_label: Any | None = None
+        self._level_canvas: Any | None = None
+        self._level_value_label: Any | None = None
 
     def run(self) -> None:
         """Run the Tkinter GUI and global hotkey listener."""
@@ -113,15 +114,28 @@ class VoicePasteGui:
         self._body_label._italic_font = body_font.copy()
         self._body_label._italic_font.configure(slant="italic")
 
-        self._level_label = tk.Label(
-            container,
-            text="RMS --.- dBFS  Peak --.- dBFS",
+        meter_row = tk.Frame(container, bg="#f7fafc")
+        meter_row.pack(fill="x", pady=(8, 0))
+        self._level_canvas = tk.Canvas(
+            meter_row,
+            width=200,
+            height=20,
+            bg="#0b0f0c",
+            bd=0,
+            highlightthickness=1,
+            highlightbackground="#1a202c",
+        )
+        self._level_canvas.pack(side="left", fill="x", expand=True)
+        self._level_value_label = tk.Label(
+            meter_row,
+            text="RMS --.-  Peak --.- dBFS",
             bg="#f7fafc",
             fg="#4a5568",
             anchor="e",
+            width=23,
             font=("TkDefaultFont", 10),
         )
-        self._level_label.pack(fill="x", pady=(8, 0))
+        self._level_value_label.pack(side="right", padx=(8, 0))
 
         self._ensure_level_monitor()
         self._start_hotkey()
@@ -183,8 +197,8 @@ class VoicePasteGui:
         try:
             self._level_monitor.start()
         except Exception:
-            if self._level_label is not None:
-                self._level_label.configure(text="RMS --.- dBFS  Peak --.- dBFS")
+            if self._level_value_label is not None:
+                self._level_value_label.configure(text="RMS --.-  Peak --.- dBFS")
 
     def _refresh(self) -> None:
         if self._closed:
@@ -204,14 +218,37 @@ class VoicePasteGui:
                 fg=vm.body_color,
                 font=getattr(self._body_label, font_key),
             )
-        if self._level_label is not None:
+        if self._level_canvas is not None and self._level_value_label is not None:
             level = (
                 self.app.latest_mic_level
                 if self.app.state == State.RECORDING
                 else self._level_monitor.latest_level
             )
-            self._level_label.configure(text=format_mic_level(level))
+            self._render_level_meter(level)
         self.root.attributes("-topmost", True)
+
+    def _render_level_meter(self, level: MicLevel) -> None:
+        canvas = self._level_canvas
+        value_label = self._level_value_label
+        if canvas is None or value_label is None:
+            return
+        width = int(canvas.winfo_width() or 250)
+        height = int(canvas.winfo_height() or 24)
+        rms_x = int(width * dbfs_to_meter_fraction(level.rms_dbfs))
+        peak_x = int(width * dbfs_to_meter_fraction(level.peak_dbfs))
+
+        canvas.delete("all")
+        canvas.create_rectangle(0, 0, width, height, fill="#050805", outline="")
+        for dbfs in (-60, -48, -36, -24, -12):
+            x = int(width * dbfs_to_meter_fraction(float(dbfs)))
+            canvas.create_line(x, 0, x, height, fill="#1f2a24")
+            canvas.create_text(x + 2, height / 2, text=str(dbfs), fill="#7fa886", anchor="w")
+        canvas.create_rectangle(0, 2, rms_x, height - 2, fill="#008a12", outline="")
+        canvas.create_line(peak_x, 0, peak_x, height, fill="#f7fafc", width=2)
+        if level.rms_dbfs <= METER_MIN_DBFS and level.peak_dbfs <= METER_MIN_DBFS:
+            value_label.configure(text="RMS -inf  Peak -inf dBFS")
+            return
+        value_label.configure(text=f"RMS {level.rms_dbfs:5.1f}  Peak {level.peak_dbfs:5.1f} dBFS")
 
 
 def main() -> None:

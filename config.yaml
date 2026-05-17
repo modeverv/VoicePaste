@@ -6,6 +6,7 @@ input_device: 1
 input_sample_rate: "auto"
 sample_rate: 16000
 chunk_seconds: 3
+mic_meter_update_ms: 500
 debug_audio_path: "debug/last_recording.wav"
 formatter:
   backend: "rule" # "rule" or "llm"
