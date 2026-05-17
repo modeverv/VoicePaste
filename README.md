@@ -9,10 +9,8 @@ No subscription. No cloud. Your data never leaves your machine.
 
 ## Demo
 
-<video src="./sample.mp4" controls muted width="720"></video>
-
-If the video does not render in your viewer, open [sample.mp4](sample.mp4).
-
+![demo](sample.gif)
+[Open MP4 demo](sample.mp4)
 ---
 
 ## Features
