@@ -1,4 +1,4 @@
-hotkey: "<cmd>+<shift>+space"
+hotkey: "<cmd>+<alt>"
 model: "small"
 language: "ja"
 device: "auto"
@@ -8,7 +8,7 @@ sample_rate: 16000
 chunk_seconds: 3
 debug_audio_path: "debug/last_recording.wav"
 formatter:
-  backend: "llm" # "rule" or "llm"
+  backend: "rule" # "rule" or "llm"
   remove_fillers: true
   add_punctuation: true
   fillers:

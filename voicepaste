@@ -1,0 +1,19 @@
+#!/bin/sh
+
+set -eu
+
+launcher=$0
+
+while [ -h "$launcher" ]; do
+    launcher_dir=$(CDPATH= cd -- "$(dirname -- "$launcher")" && pwd -P)
+    link_target=$(readlink "$launcher")
+    case "$link_target" in
+        /*) launcher=$link_target ;;
+        *) launcher=$launcher_dir/$link_target ;;
+    esac
+done
+
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$launcher")" && pwd -P)
+cd "$repo_dir"
+
+exec "${VOICEPASTE_PYTHON:-python3}" -m src.gui "$@"
