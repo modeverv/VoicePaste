@@ -18,7 +18,7 @@ No subscription. No cloud. Your data never leaves your machine.
 
 - **Fully local** — audio and text are never sent to an external server
 - **Cross-platform** — macOS / Linux / Windows
-- **Push-to-Talk** — records only while the hotkey is held
+- **Push-to-Talk hotkey** — shows the GUI, brings it to the front, and records while held
 - **Fast** — uses mlx-whisper on Apple Silicon, faster-whisper everywhere else
 - **TUI or GUI** — real-time status display in the terminal or a floating window
 - **Simple** — copies to clipboard; you decide when to paste
@@ -29,9 +29,11 @@ No subscription. No cloud. Your data never leaves your machine.
 ## How it works
 
 ```
-Hold hotkey  → Recording...
+Launch GUI   → Ready window opens
+Hold hotkey  → GUI comes to front + Recording...
 Release      → Transcribing...
              → ✓ Copied to clipboard
+Esc in GUI   → Hide the window
 Paste anywhere (Cmd+V / Ctrl+V / C-y)
 ```
 
@@ -103,6 +105,11 @@ extra GUI dependency. The window is kept above other windows on macOS, Windows,
 and Linux while it shows the same Ready / RECORDING / PROCESSING / Done / Error
 states as the TUI. On macOS, the GUI window opens after model loading to avoid a
 native Tk / MLX runtime crash; loading progress is printed in the terminal first.
+
+When using the GUI, the window is shown on startup. Pressing the global hotkey
+brings the window to the front and starts recording; releasing the hotkey stops
+recording and starts transcription. Press `Esc` while the GUI is focused to hide
+the window. The next hotkey press shows it again and starts a new recording.
 
 ---
 

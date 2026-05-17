@@ -150,7 +150,7 @@ def test_gui_configures_always_on_top_window() -> None:
     assert ("attributes", ("-topmost", True)) in root.calls
     assert any(call[0] == "protocol" and call[1][0] == "WM_DELETE_WINDOW" for call in root.calls)
     assert any(call[0] == "bind" and call[1][0] == "<Escape>" for call in root.calls)
-    assert ("withdraw", ()) in root.calls
+    assert ("withdraw", ()) not in root.calls
 
 
 def test_gui_close_stops_listener_and_destroys_window() -> None:

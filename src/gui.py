@@ -160,7 +160,6 @@ class VoicePasteGui:
         self.root.attributes("-topmost", True)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.bind("<Escape>", self._hide_window)
-        self.root.withdraw()
 
     def _load_before_tk(self) -> None:
         try:
