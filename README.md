@@ -9,7 +9,8 @@ No subscription. No cloud. Your data never leaves your machine.
 
 ## Demo
 
-![demo](sample.gif)
+![demo](sample.gif)  
+
 [Open MP4 demo](sample.mp4)
 ---
 
