@@ -159,6 +159,8 @@ class VoicePasteGui:
         self.root.resizable(False, False)
         self.root.attributes("-topmost", True)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
+        self.root.bind("<Escape>", self._hide_window)
+        self.root.withdraw()
 
     def _load_before_tk(self) -> None:
         try:
@@ -178,10 +180,36 @@ class VoicePasteGui:
             return
         self.listener = self.app.hotkey_factory(
             self.app.config.hotkey,
-            self._start_recording,
-            self._stop_recording,
+            self._on_hotkey_press,
+            self._on_hotkey_release,
         )
         self.listener.start()
+
+    def _on_hotkey_press(self) -> None:
+        self._run_on_ui_thread(self._show_and_start_recording)
+
+    def _on_hotkey_release(self) -> None:
+        self._run_on_ui_thread(self._stop_recording)
+
+    def _run_on_ui_thread(self, callback: Any) -> None:
+        if self.root is None:
+            callback()
+            return
+        self.root.after(0, callback)
+
+    def _show_and_start_recording(self) -> None:
+        self._show_window()
+        self._start_recording()
+
+    def _show_window(self) -> None:
+        self.root.deiconify()
+        self.root.lift()
+        self.root.attributes("-topmost", True)
+        self.root.focus_force()
+
+    def _hide_window(self, event: Any | None = None) -> None:
+        self._stop_recording()
+        self.root.withdraw()
 
     def _start_recording(self) -> None:
         self._level_monitor.stop()

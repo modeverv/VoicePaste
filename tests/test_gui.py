@@ -72,6 +72,26 @@ class FakeRoot:
     def protocol(self, name: str, callback: object) -> None:
         self.calls.append(("protocol", (name, callback)))
 
+    def bind(self, sequence: str, callback: object) -> None:
+        self.calls.append(("bind", (sequence, callback)))
+
+    def withdraw(self) -> None:
+        self.calls.append(("withdraw", ()))
+
+    def deiconify(self) -> None:
+        self.calls.append(("deiconify", ()))
+
+    def lift(self) -> None:
+        self.calls.append(("lift", ()))
+
+    def focus_force(self) -> None:
+        self.calls.append(("focus_force", ()))
+
+    def after(self, delay_ms: int, callback: object) -> None:
+        self.calls.append(("after", (delay_ms, callback)))
+        if callable(callback):
+            callback()
+
     def destroy(self) -> None:
         self.calls.append(("destroy", ()))
 
@@ -129,6 +149,8 @@ def test_gui_configures_always_on_top_window() -> None:
     assert ("title", ("VoicePaste",)) in root.calls
     assert ("attributes", ("-topmost", True)) in root.calls
     assert any(call[0] == "protocol" and call[1][0] == "WM_DELETE_WINDOW" for call in root.calls)
+    assert any(call[0] == "bind" and call[1][0] == "<Escape>" for call in root.calls)
+    assert ("withdraw", ()) in root.calls
 
 
 def test_gui_close_stops_listener_and_destroys_window() -> None:
@@ -159,6 +181,37 @@ def test_gui_hotkey_callbacks_pause_idle_level_monitor() -> None:
     app.start_recording.assert_called_once()
     app.stop_recording.assert_called_once()
     monitor.start.assert_called_once()
+
+
+def test_gui_hotkey_press_shows_window_and_starts_recording() -> None:
+    root = FakeRoot()
+    app = make_app()
+    app.start_recording = Mock()
+    monitor = FakeLevelMonitor()
+    gui = VoicePasteGui(app, root=root)
+    gui._level_monitor = monitor
+
+    gui._on_hotkey_press()
+
+    assert ("deiconify", ()) in root.calls
+    assert ("lift", ()) in root.calls
+    assert ("attributes", ("-topmost", True)) in root.calls
+    assert ("focus_force", ()) in root.calls
+    app.start_recording.assert_called_once()
+
+
+def test_gui_escape_stops_recording_and_hides_window() -> None:
+    root = FakeRoot()
+    app = make_app()
+    app.stop_recording = Mock()
+    monitor = FakeLevelMonitor()
+    gui = VoicePasteGui(app, root=root)
+    gui._level_monitor = monitor
+
+    gui._hide_window()
+
+    app.stop_recording.assert_called_once()
+    assert ("withdraw", ()) in root.calls
 
 
 def test_gui_renders_bar_style_level_meter() -> None:
