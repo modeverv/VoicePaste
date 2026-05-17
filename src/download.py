@@ -9,18 +9,18 @@ def main() -> None:
     config = load_config("config.yaml")
 
     if config.formatter.backend != "llm":
-        print("formatter.backend が 'llm' でないためスキップします。")
+        print("skip model download because formatter.backend is not 'llm'.")
         return
 
     from src.formatter.backends.llm import download_llm_model
 
-    print("LLMモデルをダウンロードします（初回のみ・数分かかる場合があります）...")
+    print("download LLM model（first time only/this tooks few minutes）...")
 
     def on_status(msg: str) -> None:
         print(f"  {msg}", flush=True)
 
-    download_llm_model(config.formatter, on_status=on_status)
-    print("完了。")
+    download_llm_model(config.formatter, on_status=on_status, show_progress=True)
+    print("complete。")
 
 
 if __name__ == "__main__":

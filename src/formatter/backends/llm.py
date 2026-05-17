@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import platform
 import re
 from collections.abc import Callable
@@ -297,12 +298,13 @@ def _resolve_hf_model_dir(
     if on_status:
         on_status(f"モデルをダウンロード中: {model_id}")
 
-    snapshot_download(
-        repo_id=model_id,
-        local_dir=str(local_dir),
-        local_dir_use_symlinks=False,
-        tqdm_class=_make_tqdm_class(on_status) if on_status else None,
-    )
+    download_kwargs: dict[str, Any] = {
+        "repo_id": model_id,
+        "local_dir": str(local_dir),
+    }
+    if on_status:
+        download_kwargs["tqdm_class"] = _make_tqdm_class(on_status)
+    snapshot_download(**download_kwargs)
     return str(local_dir)
 
 
@@ -336,6 +338,17 @@ def _make_tqdm_class(on_status: StatusCallback) -> type:
     return _StatusTqdm
 
 
+def _prefer_http_progress_for_cli() -> None:
+    """Prefer the regular HTTP downloader when CLI progress is requested."""
+
+    os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+    try:
+        from huggingface_hub import constants
+    except ImportError:  # pragma: no cover - handled by caller's import check
+        return
+    constants.HF_HUB_DISABLE_XET = os.environ["HF_HUB_DISABLE_XET"] == "1"
+
+
 def _model_dir(model_id: str, backend: str, config: Any) -> Path:
     safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "__", model_id.strip("/"))
     path = Path(config.models_dir) / backend / safe_name
@@ -360,12 +373,13 @@ def _download_mlx_model(
     local_dir = _model_dir(model_id, "mlx", llm_cfg)
     if on_status:
         on_status(f"モデルをダウンロード中: {model_id}")
-    snapshot_download(
-        repo_id=model_id,
-        local_dir=str(local_dir),
-        local_dir_use_symlinks=False,
-        tqdm_class=tqdm_cls,
-    )
+    download_kwargs: dict[str, Any] = {
+        "repo_id": model_id,
+        "local_dir": str(local_dir),
+    }
+    if tqdm_cls is not None:
+        download_kwargs["tqdm_class"] = tqdm_cls
+    snapshot_download(**download_kwargs)
 
 
 def _download_gguf_model(
@@ -378,18 +392,20 @@ def _download_gguf_model(
     local_dir = _model_dir(repo_id, "gguf", llm_cfg)
     if on_status:
         on_status(f"モデルをダウンロード中: {repo_id}")
-    snapshot_download(
-        repo_id=repo_id,
-        local_dir=str(local_dir),
-        local_dir_use_symlinks=False,
-        allow_patterns=[llm_cfg.gguf_filename],
-        tqdm_class=tqdm_cls,
-    )
+    download_kwargs: dict[str, Any] = {
+        "repo_id": repo_id,
+        "local_dir": str(local_dir),
+        "allow_patterns": [llm_cfg.gguf_filename],
+    }
+    if tqdm_cls is not None:
+        download_kwargs["tqdm_class"] = tqdm_cls
+    snapshot_download(**download_kwargs)
 
 
 def download_llm_model(
     config: Any,
     on_status: StatusCallback | None = None,
+    show_progress: bool = False,
 ) -> None:
     """Download the LLM model files without loading them into memory.
 
@@ -397,12 +413,19 @@ def download_llm_model(
     .llm sub-config) and fetches the required files from Hugging Face into
     the configured models_dir.  Safe to call when files are already present
     — huggingface_hub will skip files that match the cached etag.
+
+    Set *show_progress* for the standalone CLI so Hugging Face's normal tqdm
+    progress bars remain visible.  Application startup keeps this disabled and
+    uses *on_status* for quiet UI-friendly status messages.
     """
     from src.config import FormatterConfig
 
     llm_cfg = config.llm if isinstance(config, FormatterConfig) else config
 
     backend = _resolve_download_backend(llm_cfg)
+
+    if show_progress:
+        _prefer_http_progress_for_cli()
 
     try:
         from huggingface_hub import snapshot_download
@@ -412,7 +435,7 @@ def download_llm_model(
             "requirements ファイルをインストールしてください。"
         ) from exc
 
-    tqdm_cls = _make_tqdm_class(on_status) if on_status else None
+    tqdm_cls = _make_tqdm_class(on_status) if on_status and not show_progress else None
 
     if backend == "mlx":
         _download_mlx_model(llm_cfg, snapshot_download, tqdm_cls, on_status)

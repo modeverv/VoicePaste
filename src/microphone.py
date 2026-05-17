@@ -57,7 +57,7 @@ def select_microphone(
     _render_microphone_table(console, devices, config.input_device)
     choices = ["d", *(str(device.index) for device in devices)]
     answer = prompt(
-        "使用するマイクを選択してください",
+        "select input device",
         choices=choices,
         default="d",
         show_choices=False,
@@ -120,7 +120,7 @@ def _render_microphone_table(
             str(device.default_samplerate),
             marker,
         )
-    body = Text("Enterで既定/設定済みマイクを使います。番号を入力すると今回だけ切り替えます。")
+    body = Text("press enter then use default mic。input number then use selected mic.")
     console.print(Panel.fit(table, title="VoicePaste"))
     console.print(body)
 

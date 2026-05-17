@@ -9,7 +9,7 @@ import pytest
 
 from src.config import FormatterConfig, LLMFormatterConfig
 from src.formatter import PostFormatter
-from src.formatter.backends.llm import LLMFormatter
+from src.formatter.backends.llm import LLMFormatter, download_llm_model
 from src.formatter.backends.rule import RuleFormatter
 
 
@@ -275,3 +275,86 @@ def test_llm_formatter_load_preloads_runner() -> None:
     formatter.load()
 
     assert runner.load_called is True
+
+
+def test_download_llm_model_uses_quiet_status_progress_by_default(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: dict[str, Any] = {}
+    fake_huggingface_hub = types.ModuleType("huggingface_hub")
+
+    def fake_snapshot_download(**kwargs: Any) -> None:
+        calls["snapshot_download"] = kwargs
+
+    fake_huggingface_hub.snapshot_download = fake_snapshot_download
+    monkeypatch.setitem(sys.modules, "huggingface_hub", fake_huggingface_hub)
+
+    download_llm_model(
+        LLMFormatterConfig(
+            backend="mlx",
+            mlx_model="mlx-community/test-model",
+            models_dir=str(tmp_path),
+        ),
+        on_status=lambda _msg: None,
+    )
+
+    assert calls["snapshot_download"]["repo_id"] == "mlx-community/test-model"
+    assert "tqdm_class" in calls["snapshot_download"]
+    assert "local_dir_use_symlinks" not in calls["snapshot_download"]
+
+
+def test_download_llm_model_show_progress_keeps_huggingface_tqdm(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: dict[str, Any] = {}
+    fake_huggingface_hub = types.ModuleType("huggingface_hub")
+    fake_huggingface_hub.constants = types.SimpleNamespace(HF_HUB_DISABLE_XET=False)
+
+    def fake_snapshot_download(**kwargs: Any) -> None:
+        calls["snapshot_download"] = kwargs
+
+    fake_huggingface_hub.snapshot_download = fake_snapshot_download
+    monkeypatch.delenv("HF_HUB_DISABLE_XET", raising=False)
+    monkeypatch.setitem(sys.modules, "huggingface_hub", fake_huggingface_hub)
+
+    download_llm_model(
+        LLMFormatterConfig(
+            backend="mlx",
+            mlx_model="mlx-community/test-model",
+            models_dir=str(tmp_path),
+        ),
+        on_status=lambda _msg: None,
+        show_progress=True,
+    )
+
+    assert calls["snapshot_download"]["repo_id"] == "mlx-community/test-model"
+    assert "tqdm_class" not in calls["snapshot_download"]
+    assert "local_dir_use_symlinks" not in calls["snapshot_download"]
+    assert fake_huggingface_hub.constants.HF_HUB_DISABLE_XET is True
+
+
+def test_download_llm_model_show_progress_respects_explicit_xet_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: dict[str, Any] = {}
+    fake_huggingface_hub = types.ModuleType("huggingface_hub")
+    fake_huggingface_hub.constants = types.SimpleNamespace(HF_HUB_DISABLE_XET=True)
+
+    def fake_snapshot_download(**kwargs: Any) -> None:
+        calls["snapshot_download"] = kwargs
+
+    fake_huggingface_hub.snapshot_download = fake_snapshot_download
+    monkeypatch.setenv("HF_HUB_DISABLE_XET", "0")
+    monkeypatch.setitem(sys.modules, "huggingface_hub", fake_huggingface_hub)
+
+    download_llm_model(
+        LLMFormatterConfig(
+            backend="mlx",
+            mlx_model="mlx-community/test-model",
+            models_dir=str(tmp_path),
+        ),
+        show_progress=True,
+    )
+
+    assert calls["snapshot_download"]["repo_id"] == "mlx-community/test-model"
+    assert fake_huggingface_hub.constants.HF_HUB_DISABLE_XET is False
