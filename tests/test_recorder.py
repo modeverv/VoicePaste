@@ -55,6 +55,8 @@ def test_recorder_callback_splits_chunks_and_full_buffer() -> None:
         chunks.get(),
         np.array([1, 1, 1, 1, 2, 2, 2, 2], dtype=np.float32),
     )
+    assert recorder.latest_level.rms == pytest.approx(2.0)
+    assert recorder.latest_level.peak == pytest.approx(2.0)
 
 
 def test_recorder_stop_returns_full_audio_and_flushes_partial_chunk() -> None:

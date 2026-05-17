@@ -129,6 +129,7 @@ model: "base"                    # tiny / base / small / medium / large
 language: "ja"                   # transcription language
 device: "auto"                   # auto / cpu / cuda / mlx
 chunk_seconds: 3                 # interim-display chunk length in seconds
+mic_meter_update_ms: 200         # GUI microphone meter refresh interval
 formatter:
   backend: "rule"                # rule / llm
   remove_fillers: true           # strip filler words

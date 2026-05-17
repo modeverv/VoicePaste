@@ -17,6 +17,7 @@ def test_load_config_defaults_when_file_missing(tmp_path: Path) -> None:
     assert config.input_sample_rate == "auto"
     assert config.sample_rate == 16000
     assert config.chunk_seconds == 3
+    assert config.mic_meter_update_ms == 200
     assert config.debug_audio_path == "debug/last_recording.wav"
     assert config.formatter.backend == "rule"
     assert config.formatter.fillers == DEFAULT_FILLERS
@@ -37,6 +38,7 @@ input_device: "MacBook Proのマイク"
 input_sample_rate: 48000
 sample_rate: 8000
 chunk_seconds: 5
+mic_meter_update_ms: 150
 debug_audio_path: tmp/input.wav
 formatter:
   backend: llm
@@ -62,6 +64,7 @@ formatter:
     assert config.input_sample_rate == 48000
     assert config.sample_rate == 8000
     assert config.chunk_seconds == 5
+    assert config.mic_meter_update_ms == 150
     assert config.debug_audio_path == "tmp/input.wav"
     assert config.hotkey == "<cmd>+<shift>+space"
     assert config.formatter.backend == "llm"

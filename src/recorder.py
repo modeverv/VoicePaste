@@ -10,6 +10,8 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+from src.mic_level import MicLevel, measure_level
+
 AudioArray = NDArray[np.float32]
 InputDevice = int | str | None
 
@@ -49,6 +51,7 @@ class Recorder:
         self._chunk_buffer: list[AudioArray] = []
         self._chunk_frame_count = 0
         self._stream: Any | None = None
+        self._latest_level = MicLevel()
         self._lock = threading.Lock()
         self._recording = False
 
@@ -57,6 +60,13 @@ class Recorder:
         """Return whether recording is active."""
 
         return self._recording
+
+    @property
+    def latest_level(self) -> MicLevel:
+        """Return the latest level measured from the active recording stream."""
+
+        with self._lock:
+            return self._latest_level
 
     def start(self) -> None:
         """Start recording from the default input device."""
@@ -71,6 +81,7 @@ class Recorder:
             self._full_buffer = []
             self._chunk_buffer = []
             self._chunk_frame_count = 0
+            self._latest_level = MicLevel()
             self._recording = True
         self._stream = sd.InputStream(
             samplerate=self._capture_sample_rate,
@@ -106,9 +117,11 @@ class Recorder:
     ) -> None:
         del time_info, status
         mono = np.asarray(indata, dtype=np.float32).reshape(frames, -1).mean(axis=1)
+        level = measure_level(indata)
         with self._lock:
             if not self._recording:
                 return
+            self._latest_level = level
             self._full_buffer.append(mono.copy())
             self._chunk_buffer.append(mono.copy())
             self._chunk_frame_count += frames

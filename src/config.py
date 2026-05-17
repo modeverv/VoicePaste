@@ -59,6 +59,7 @@ class Config:
     input_sample_rate: int | str = "auto"
     sample_rate: int = 16000
     chunk_seconds: int = 3
+    mic_meter_update_ms: int = 200
     debug_audio_path: str = "debug/last_recording.wav"
     formatter: FormatterConfig = field(default_factory=FormatterConfig)
 
@@ -152,6 +153,7 @@ def load_config(path: str | Path = "config.yaml") -> Config:
         ),
         sample_rate=int(raw.get("sample_rate", defaults.sample_rate)),
         chunk_seconds=int(raw.get("chunk_seconds", defaults.chunk_seconds)),
+        mic_meter_update_ms=int(raw.get("mic_meter_update_ms", defaults.mic_meter_update_ms)),
         debug_audio_path=str(raw.get("debug_audio_path", defaults.debug_audio_path)),
         formatter=formatter,
     )

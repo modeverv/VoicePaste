@@ -10,6 +10,7 @@ from typing import Any
 from src.config import load_config
 from src.hotkey import HotkeyListener
 from src.main import State, VoicePasteApp
+from src.mic_level import MicLevelMonitor, format_mic_level
 
 
 @dataclass(frozen=True)
@@ -62,9 +63,15 @@ class VoicePasteGui:
         self.root = root
         self.poll_ms = poll_ms
         self.listener: HotkeyListener | None = None
+        self._level_monitor = MicLevelMonitor(
+            device=app.config.input_device,
+            input_sample_rate=app.config.input_sample_rate,
+            update_ms=app.config.mic_meter_update_ms,
+        )
         self._closed = False
         self._status_label: Any | None = None
         self._body_label: Any | None = None
+        self._level_label: Any | None = None
 
     def run(self) -> None:
         """Run the Tkinter GUI and global hotkey listener."""
@@ -106,6 +113,17 @@ class VoicePasteGui:
         self._body_label._italic_font = body_font.copy()
         self._body_label._italic_font.configure(slant="italic")
 
+        self._level_label = tk.Label(
+            container,
+            text="RMS --.- dBFS  Peak --.- dBFS",
+            bg="#f7fafc",
+            fg="#4a5568",
+            anchor="e",
+            font=("TkDefaultFont", 10),
+        )
+        self._level_label.pack(fill="x", pady=(8, 0))
+
+        self._ensure_level_monitor()
         self._start_hotkey()
         self._refresh()
         self.root.mainloop()
@@ -114,6 +132,7 @@ class VoicePasteGui:
         """Stop the listener and close the window."""
 
         self._closed = True
+        self._level_monitor.stop()
         if self.listener is not None:
             self.listener.stop()
             self.listener = None
@@ -122,7 +141,7 @@ class VoicePasteGui:
 
     def _configure_root(self) -> None:
         self.root.title("VoicePaste")
-        self.root.geometry("380x170")
+        self.root.geometry("420x190")
         self.root.resizable(False, False)
         self.root.attributes("-topmost", True)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
@@ -145,10 +164,27 @@ class VoicePasteGui:
             return
         self.listener = self.app.hotkey_factory(
             self.app.config.hotkey,
-            self.app.start_recording,
-            self.app.stop_recording,
+            self._start_recording,
+            self._stop_recording,
         )
         self.listener.start()
+
+    def _start_recording(self) -> None:
+        self._level_monitor.stop()
+        self.app.start_recording()
+
+    def _stop_recording(self) -> None:
+        self.app.stop_recording()
+        self._ensure_level_monitor()
+
+    def _ensure_level_monitor(self) -> None:
+        if self.app.state == State.RECORDING or self._level_monitor.is_running:
+            return
+        try:
+            self._level_monitor.start()
+        except Exception:
+            if self._level_label is not None:
+                self._level_label.configure(text="RMS --.- dBFS  Peak --.- dBFS")
 
     def _refresh(self) -> None:
         if self._closed:
@@ -168,6 +204,13 @@ class VoicePasteGui:
                 fg=vm.body_color,
                 font=getattr(self._body_label, font_key),
             )
+        if self._level_label is not None:
+            level = (
+                self.app.latest_mic_level
+                if self.app.state == State.RECORDING
+                else self._level_monitor.latest_level
+            )
+            self._level_label.configure(text=format_mic_level(level))
         self.root.attributes("-topmost", True)
 
 

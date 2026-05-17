@@ -75,6 +75,19 @@ class FakeRoot:
         self.calls.append(("destroy", ()))
 
 
+class FakeLevelMonitor:
+    def __init__(self) -> None:
+        self.is_running = False
+        self.start = Mock(side_effect=self._start)
+        self.stop = Mock(side_effect=self._stop)
+
+    def _start(self) -> None:
+        self.is_running = True
+
+    def _stop(self) -> None:
+        self.is_running = False
+
+
 def test_gui_configures_always_on_top_window() -> None:
     root = FakeRoot()
     gui = VoicePasteGui(make_app(), root=root)
@@ -96,3 +109,21 @@ def test_gui_close_stops_listener_and_destroys_window() -> None:
 
     listener.stop.assert_called_once()
     assert ("destroy", ()) in root.calls
+
+
+def test_gui_hotkey_callbacks_pause_idle_level_monitor() -> None:
+    root = FakeRoot()
+    app = make_app()
+    app.start_recording = Mock()
+    app.stop_recording = Mock()
+    monitor = FakeLevelMonitor()
+    gui = VoicePasteGui(app, root=root)
+    gui._level_monitor = monitor
+
+    gui._start_recording()
+    gui._stop_recording()
+
+    monitor.stop.assert_called_once()
+    app.start_recording.assert_called_once()
+    app.stop_recording.assert_called_once()
+    monitor.start.assert_called_once()

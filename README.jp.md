@@ -120,6 +120,7 @@ model: "base"                    # tiny / base / small / medium / large
 language: "ja"                   # 文字起こし言語
 device: "auto"                   # auto / cpu / cuda / mlx
 chunk_seconds: 3                 # 暫定表示のチャンク秒数
+mic_meter_update_ms: 200         # GUIマイクメーターの更新間隔
 formatter:
   backend: "rule"                # rule / llm
   remove_fillers: true           # あー・えっと等を除去する

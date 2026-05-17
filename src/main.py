@@ -21,6 +21,7 @@ from src.clipboard import copy_to_clipboard
 from src.config import Config, load_config
 from src.formatter import PostFormatter
 from src.hotkey import HotkeyListener
+from src.mic_level import MicLevel
 from src.recorder import AudioArray, Recorder
 from src.transcriber import Transcriber
 
@@ -112,6 +113,16 @@ class VoicePasteApp:
 
         if self._final_thread is not None:
             self._final_thread.join(timeout=timeout)
+
+    @property
+    def latest_mic_level(self) -> MicLevel:
+        """Return the latest level from the active recorder, if any."""
+
+        with self._lock:
+            recorder = self._recorder
+        if recorder is None:
+            return MicLevel()
+        return recorder.latest_level
 
     def render(self) -> Panel:
         """Render the current TUI panel."""
