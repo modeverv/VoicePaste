@@ -9,7 +9,7 @@ from src.main import State, VoicePasteApp
 
 class FakeTranscriber:
     def load(self) -> None:
-        pass
+        """Test double: no model needs to be loaded for GUI view-model tests."""
 
 
 def make_app() -> VoicePasteApp:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Any, cast
 
 from rich.console import Console
 from rich.panel import Panel
@@ -63,7 +63,7 @@ def select_microphone(
         show_choices=False,
     )
     selected = _selected_device(answer, devices, config.input_device)
-    return replace(config, input_device=selected)
+    return cast(Config, replace(config, input_device=selected))
 
 
 def list_input_devices(query_devices: Callable[..., Any] | None = None) -> list[MicrophoneDevice]:
@@ -107,7 +107,12 @@ def _render_microphone_table(
     table.add_column("Default")
     for device in devices:
         configured = _matches_configured_device(device, configured_device)
-        marker = "config" if configured else ("system" if device.is_default else "")
+        if configured:
+            marker = "config"
+        elif device.is_default:
+            marker = "system"
+        else:
+            marker = ""
         table.add_row(
             str(device.index),
             device.name,

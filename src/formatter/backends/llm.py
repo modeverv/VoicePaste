@@ -117,17 +117,17 @@ class LLMFormatter(PostFormatter):
     @staticmethod
     def _extract_json_object(text: str) -> dict | None:
         """Try to parse JSON, falling back to extracting the first {...} block."""
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
+        candidates = [text]
         start = text.find("{")
         end = text.rfind("}")
         if start != -1 and end > start:
+            candidates.append(text[start : end + 1])
+
+        for candidate in candidates:
             try:
-                return json.loads(text[start : end + 1])
+                return json.loads(candidate)
             except json.JSONDecodeError:
-                pass
+                continue
         return None
 
     @staticmethod
@@ -343,6 +343,50 @@ def _model_dir(model_id: str, backend: str, config: Any) -> Path:
     return path
 
 
+def _resolve_download_backend(llm_cfg: Any) -> str:
+    backend = llm_cfg.backend.lower()
+    if backend == "auto":
+        return "mlx" if platform.system() == "Darwin" else "gguf"
+    return backend
+
+
+def _download_mlx_model(
+    llm_cfg: Any,
+    snapshot_download: Any,
+    tqdm_cls: type | None,
+    on_status: StatusCallback | None,
+) -> None:
+    model_id = llm_cfg.mlx_model if llm_cfg.model in ("", "auto") else llm_cfg.model
+    local_dir = _model_dir(model_id, "mlx", llm_cfg)
+    if on_status:
+        on_status(f"モデルをダウンロード中: {model_id}")
+    snapshot_download(
+        repo_id=model_id,
+        local_dir=str(local_dir),
+        local_dir_use_symlinks=False,
+        tqdm_class=tqdm_cls,
+    )
+
+
+def _download_gguf_model(
+    llm_cfg: Any,
+    snapshot_download: Any,
+    tqdm_cls: type | None,
+    on_status: StatusCallback | None,
+) -> None:
+    repo_id = llm_cfg.gguf_repo_id if llm_cfg.model in ("", "auto") else llm_cfg.model
+    local_dir = _model_dir(repo_id, "gguf", llm_cfg)
+    if on_status:
+        on_status(f"モデルをダウンロード中: {repo_id}")
+    snapshot_download(
+        repo_id=repo_id,
+        local_dir=str(local_dir),
+        local_dir_use_symlinks=False,
+        allow_patterns=[llm_cfg.gguf_filename],
+        tqdm_class=tqdm_cls,
+    )
+
+
 def download_llm_model(
     config: Any,
     on_status: StatusCallback | None = None,
@@ -358,9 +402,7 @@ def download_llm_model(
 
     llm_cfg = config.llm if isinstance(config, FormatterConfig) else config
 
-    backend = llm_cfg.backend.lower()
-    if backend == "auto":
-        backend = "mlx" if platform.system() == "Darwin" else "gguf"
+    backend = _resolve_download_backend(llm_cfg)
 
     try:
         from huggingface_hub import snapshot_download
@@ -373,25 +415,6 @@ def download_llm_model(
     tqdm_cls = _make_tqdm_class(on_status) if on_status else None
 
     if backend == "mlx":
-        model_id = llm_cfg.mlx_model if llm_cfg.model in ("", "auto") else llm_cfg.model
-        local_dir = _model_dir(model_id, "mlx", llm_cfg)
-        if on_status:
-            on_status(f"モデルをダウンロード中: {model_id}")
-        snapshot_download(
-            repo_id=model_id,
-            local_dir=str(local_dir),
-            local_dir_use_symlinks=False,
-            tqdm_class=tqdm_cls,
-        )
+        _download_mlx_model(llm_cfg, snapshot_download, tqdm_cls, on_status)
     elif backend == "gguf":
-        repo_id = llm_cfg.gguf_repo_id if llm_cfg.model in ("", "auto") else llm_cfg.model
-        local_dir = _model_dir(repo_id, "gguf", llm_cfg)
-        if on_status:
-            on_status(f"モデルをダウンロード中: {repo_id}")
-        snapshot_download(
-            repo_id=repo_id,
-            local_dir=str(local_dir),
-            local_dir_use_symlinks=False,
-            allow_patterns=[llm_cfg.gguf_filename],
-            tqdm_class=tqdm_cls,
-        )
+        _download_gguf_model(llm_cfg, snapshot_download, tqdm_cls, on_status)

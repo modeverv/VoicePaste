@@ -4,12 +4,13 @@ import wave
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from src.audio_debug import audio_rms, is_silent, save_wav
 
 
 def test_audio_rms_and_silence_detection() -> None:
-    assert audio_rms(np.array([0.0, 0.0], dtype=np.float32)) == 0.0
+    assert audio_rms(np.array([0.0, 0.0], dtype=np.float32)) == pytest.approx(0.0)
     assert is_silent(np.array([0.0, 0.0], dtype=np.float32)) is True
     assert is_silent(np.array([0.1, 0.0], dtype=np.float32)) is False
 

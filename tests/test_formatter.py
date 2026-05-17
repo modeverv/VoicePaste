@@ -216,7 +216,7 @@ def test_mlx_runner_loads_configured_model(monkeypatch: pytest.MonkeyPatch, tmp_
     expected_dir = str(tmp_path / "mlx" / "mlx-community__test-model")
     assert calls["snapshot_download"]["local_dir"] == expected_dir
     assert calls["model_name"] == expected_dir
-    assert calls["generate_kwargs"]["temperature"] == 0.0
+    assert calls["generate_kwargs"]["temperature"] == pytest.approx(0.0)
 
 
 def test_gguf_runner_loads_configured_repo(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -255,7 +255,7 @@ def test_gguf_runner_loads_configured_repo(monkeypatch: pytest.MonkeyPatch, tmp_
     assert calls["from_pretrained"]["filename"] == "*Q4_K_M.gguf"
     assert calls["from_pretrained"]["local_dir"] == str(tmp_path / "gguf" / "example__gemma-gguf")
     assert calls["from_pretrained"]["local_dir_use_symlinks"] is False
-    assert calls["chat"]["temperature"] == 0.0
+    assert calls["chat"]["temperature"] == pytest.approx(0.0)
     assert calls["chat"]["response_format"]["schema"]["required"] == ["formatted_text"]
 
 

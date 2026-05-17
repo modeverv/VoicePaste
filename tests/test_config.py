@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from src.config import DEFAULT_FILLERS, DEFAULT_LLM_PROMPT, load_config
 
 
@@ -72,6 +74,6 @@ formatter:
     assert config.formatter.llm.gguf_filename == "*Q5_K_M.gguf"
     assert config.formatter.llm.models_dir == str(tmp_path / "local-models")
     assert config.formatter.llm.max_tokens == 128
-    assert config.formatter.llm.temperature == 0.1
+    assert config.formatter.llm.temperature == pytest.approx(0.1)
     assert config.formatter.llm.n_ctx == 2048
     assert config.formatter.llm.n_gpu_layers == 0
